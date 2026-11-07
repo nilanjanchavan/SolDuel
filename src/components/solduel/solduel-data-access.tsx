@@ -217,23 +217,20 @@ export function useProfileAccount(address: string) {
 
   const pdaQuery = useQuery({
     queryKey: ['profile-pda-lookup', parsedPubkey?.toBase58()],
-    queryFn: async (): Promise<PublicKey | null> => {
+    queryFn: async (): Promise<{ pda: PublicKey; isDirectPda: boolean } | null> => {
       if (!parsedPubkey) return null;
-      try {
-        const info = await connection.getAccountInfo(parsedPubkey);
-        if (info && info.owner.equals(PROGRAM_ID) && info.data.length >= 67) {
-          return parsedPubkey;
-        }
-      } catch {
-        // Fallback to derived PDA on RPC error
+      const info = await connection.getAccountInfo(parsedPubkey);
+      if (info && info.owner.equals(PROGRAM_ID) && info.data.length >= 67) {
+        return { pda: parsedPubkey, isDirectPda: true };
       }
-      return getProfilePda(parsedPubkey)[0];
+      return { pda: getProfilePda(parsedPubkey)[0], isDirectPda: false };
     },
     enabled: !!parsedPubkey,
     staleTime: 60000,
   });
 
-  const profilePda = pdaQuery.data ?? null;
+  const profilePda = pdaQuery.data?.pda ?? null;
+  const isDirectPda = pdaQuery.data?.isDirectPda ?? false;
 
   const query = useQuery({
     queryKey: ['profile', address, profilePda?.toBase58()],
@@ -267,10 +264,16 @@ export function useProfileAccount(address: string) {
 
   return {
     profile: query.data,
-    isLoading: pdaQuery.isLoading || query.isLoading,
-    refetch: query.refetch,
+    isLoading: pdaQuery.isLoading || (!!profilePda && query.isLoading),
+    isError: pdaQuery.isError || query.isError,
+    error: pdaQuery.error || query.error,
+    refetch: () => {
+      pdaQuery.refetch();
+      query.refetch();
+    },
     profilePda,
-    walletPubkey: parsedPubkey,
+    isDirectPda,
+    walletPubkey: isDirectPda ? null : parsedPubkey,
   };
 }
 

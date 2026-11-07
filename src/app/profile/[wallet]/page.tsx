@@ -1,6 +1,6 @@
 'use client';
 
-import { use, useState } from 'react';
+import { use, useState, useMemo } from 'react';
 import Link from 'next/link';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { PublicKey } from '@solana/web3.js';
@@ -52,7 +52,16 @@ export default function ProfilePage({ params }: { params: Promise<{ wallet: stri
   const [copied, setCopied] = useState(false);
   const [mintingIndex, setMintingIndex] = useState<number | null>(null);
 
-  const { profile, isLoading, refetch, walletPubkey } = useProfileAccount(targetWallet);
+  const parsedAddress = useMemo(() => {
+    try {
+      return new PublicKey(targetWallet);
+    } catch {
+      return null;
+    }
+  }, [targetWallet]);
+
+  const { profile, isLoading, isError, error, refetch, walletPubkey, isDirectPda } =
+    useProfileAccount(targetWallet);
   const mintBadgeMutation = useMintBadge();
 
   const myProfilePda = publicKey ? getProfilePda(publicKey)[0].toBase58() : null;
@@ -60,11 +69,13 @@ export default function ProfilePage({ params }: { params: Promise<{ wallet: stri
     publicKey !== null &&
     (publicKey.toBase58() === targetWallet || myProfilePda === targetWallet);
 
+  const canChallenge = !isMe && !isDirectPda && walletPubkey !== null;
+
   const handleCopy = async () => {
     try {
       await navigator.clipboard.writeText(targetWallet);
       setCopied(true);
-      toast.success('Wallet address copied');
+      toast.success('Address copied');
       setTimeout(() => setCopied(false), 2000);
     } catch {
       toast.error('Failed to copy address');
@@ -88,11 +99,11 @@ export default function ProfilePage({ params }: { params: Promise<{ wallet: stri
     }
   };
 
-  if (!walletPubkey) {
+  if (!parsedAddress) {
     return (
       <div className="max-w-xl mx-auto py-12 text-center space-y-4">
         <AlertCircle className="w-12 h-12 text-destructive mx-auto" />
-        <h1 className="text-xl font-bold">Invalid Wallet Address</h1>
+        <h1 className="text-xl font-bold">Invalid Address</h1>
         <p className="text-sm text-neutral-500">
           The address &quot;{targetWallet}&quot; is not a valid Solana public key.
         </p>
@@ -181,7 +192,7 @@ export default function ProfilePage({ params }: { params: Promise<{ wallet: stri
               <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isLoading}>
                 {isLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : null} Refresh
               </Button>
-              {!isMe && (
+              {canChallenge && (
                 <Button size="sm" asChild className="gap-1.5 bg-purple-600 hover:bg-purple-700">
                   <Link href={`/?opponent=${targetWallet}`}>
                     <Swords className="w-4 h-4" /> Challenge
@@ -193,8 +204,24 @@ export default function ProfilePage({ params }: { params: Promise<{ wallet: stri
         </CardContent>
       </Card>
 
+      {/* RPC Error Alert */}
+      {isError && (
+        <Card className="p-8 text-center border-destructive/30 space-y-3">
+          <AlertCircle className="w-10 h-10 text-destructive mx-auto" />
+          <h2 className="text-lg font-bold">Failed to Load Profile</h2>
+          <p className="text-sm text-neutral-500 max-w-md mx-auto">
+            {error instanceof Error ? error.message : 'Unable to query Solana RPC for this profile.'}
+          </p>
+          <div className="pt-2">
+            <Button onClick={() => refetch()} size="sm" variant="outline">
+              Retry
+            </Button>
+          </div>
+        </Card>
+      )}
+
       {/* No Profile Alert */}
-      {!isLoading && !profile && (
+      {!isLoading && !isError && !profile && (
         <Card className="p-8 text-center border-dashed border-neutral-300 dark:border-neutral-800 space-y-3">
           <Shield className="w-10 h-10 text-neutral-400 mx-auto" />
           <h2 className="text-lg font-bold">No Duels Recorded Yet</h2>
@@ -204,11 +231,19 @@ export default function ProfilePage({ params }: { params: Promise<{ wallet: stri
               : 'This player has not participated in any SolDuel matches on Devnet yet.'}
           </p>
           <div className="pt-2">
-            <Button asChild size="sm" className="bg-purple-600 hover:bg-purple-700">
-              <Link href={isMe ? '/' : `/?opponent=${targetWallet}`}>
-                {isMe ? 'Play First Match' : 'Challenge to Duel'}
-              </Link>
-            </Button>
+            {isMe ? (
+              <Button asChild size="sm" className="bg-purple-600 hover:bg-purple-700">
+                <Link href="/">Play First Match</Link>
+              </Button>
+            ) : canChallenge ? (
+              <Button asChild size="sm" className="bg-purple-600 hover:bg-purple-700">
+                <Link href={`/?opponent=${targetWallet}`}>Challenge to Duel</Link>
+              </Button>
+            ) : (
+              <Button asChild size="sm" variant="outline">
+                <Link href="/">Back to Lobby</Link>
+              </Button>
+            )}
           </div>
         </Card>
       )}

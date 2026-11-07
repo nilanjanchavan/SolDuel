@@ -380,8 +380,20 @@ export default function RoomPage({
               </Button>
             </div>
 
-            {/* If spectator / challenger: Join button */}
-            {!isCreator && (
+            {/* If spectator / challenger: Join button for custom rooms, Quick Play guidance for quick play */}
+            {!isCreator && room.isQuickPlay && (
+              <div className="space-y-2 text-center py-2">
+                <p className="text-xs text-neutral-500">
+                  This room was created through Quick Play. To match with this player, enter Quick Play with the same game and tier in the lobby.
+                </p>
+                <Button asChild className="w-full bg-purple-600 hover:bg-purple-700 text-white font-semibold py-5">
+                  <Link href={`/?tab=quick&game=${room.game}&tier=${room.tier}`}>
+                    Find Match via Quick Play
+                  </Link>
+                </Button>
+              </div>
+            )}
+            {!isCreator && !room.isQuickPlay && (
               <Button
                 className="w-full bg-purple-600 hover:bg-purple-700 text-white font-semibold py-5"
                 disabled={isJoining}
