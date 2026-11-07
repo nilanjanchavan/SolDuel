@@ -2,6 +2,7 @@ use anchor_lang::prelude::*;
 use crate::constants::INITIAL_RATING;
 use crate::state::Profile;
 
+/// Updates Elo ratings, win/loss/draw records, streaks, and active room pointers for both match players.
 pub fn update_ratings_and_stats_raw(
     prof_0_acc: &AccountInfo,
     prof_1_acc: &AccountInfo,
