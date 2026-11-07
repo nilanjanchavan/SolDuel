@@ -407,7 +407,10 @@ pub fn handle_quick_play(ctx: Context<QuickPlay>, game: u8, tier: u8) -> Result<
                 // Clear active_room in creator's profile
                 {
                     let mut prof_data = old_prof_info.try_borrow_mut_data()?;
-                    prof_data[34..66].copy_from_slice(Pubkey::default().as_ref());
+                    let mut old_profile = Profile::try_deserialize(&mut &prof_data[..])?;
+                    old_profile.active_room = Pubkey::default();
+                    let mut dst: &mut [u8] = &mut prof_data[..];
+                    old_profile.try_serialize(&mut dst)?;
                 }
 
                 // Refund all lamports from old room to old creator
