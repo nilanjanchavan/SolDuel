@@ -315,7 +315,7 @@ export default function RoomPage({
 
   // Registered game engine/ui
   const registered =
-    currentRoom.game >= 0 && currentRoom.game <= 3
+    currentRoom.game in GameKind || (currentRoom.game >= 0 && currentRoom.game <= 3)
       ? getGame(currentRoom.game as GameKind)
       : undefined;
 
@@ -332,7 +332,7 @@ export default function RoomPage({
             Back to Lobby
           </Link>
           {isError && currentRoom && (
-            <span className="text-xs bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 px-2.5 py-0.5 rounded-full font-medium animate-pulse">
+            <span className="text-xs bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 px-2.5 py-0.5 rounded-full font-medium motion-safe:animate-pulse">
               Reconnecting to network...
             </span>
           )}
@@ -512,7 +512,7 @@ export default function RoomPage({
             <Trophy className="h-12 w-12 text-emerald-500 mx-auto" />
             <h3 className="text-xl font-bold text-emerald-600 dark:text-emerald-400">Match Finished!</h3>
             <p className="text-sm text-neutral-500">
-              The {totalPotCoins} coins pot has been paid out on-chain to the winner.
+              The match has concluded and funds ({totalPotCoins} coins) have been distributed on-chain according to the match outcome.
             </p>
             <Link href="/">
               <Button className="mt-2 bg-purple-600 hover:bg-purple-700 text-white">
