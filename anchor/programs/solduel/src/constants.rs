@@ -38,6 +38,8 @@ pub const WORD_CHAIN_PREFIX_FLAGS_COUNT: usize = 676;
 
 /// Starting skill rating
 pub const INITIAL_RATING: u16 = 1000;
+pub const MIN_RATING: u16 = 100;
+pub const MAX_RATING: u16 = 5000;
 
 /// Badge bit flags
 pub const BADGE_FIRST_WIN: u32 = 1 << 0;

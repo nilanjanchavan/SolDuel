@@ -42,12 +42,12 @@ pub mod solduel {
         room::handle_cancel_room(ctx)
     }
 
-    /// Submits a game move/action, executing deterministic game rules and settling on conclusion.
+    /// Dispatches a game action and settles a completed game. Production game rules are not implemented yet.
     pub fn game_action(ctx: Context<GameAction>, data: Vec<u8>) -> Result<()> {
         room::handle_game_action(ctx, data)
     }
 
-    /// Claims a forfeit victory or draw settlement when a player's move timer has elapsed.
+    /// Claims timeout settlement after the deadline and grace period. Production game timeouts currently settle as draws.
     pub fn claim_timeout(ctx: Context<ClaimTimeout>) -> Result<()> {
         room::handle_claim_timeout(ctx)
     }

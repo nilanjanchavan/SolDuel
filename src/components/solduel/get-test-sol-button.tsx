@@ -8,6 +8,9 @@ import { ExternalLink, Loader2, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 
+/**
+ * Component providing devnet SOL faucet requests with fallback links and balance display.
+ */
 export function GetTestSolButton() {
   const { connection } = useConnection();
   const { publicKey } = useWallet();

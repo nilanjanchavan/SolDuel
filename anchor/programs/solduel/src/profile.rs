@@ -1,5 +1,5 @@
 use anchor_lang::prelude::*;
-use crate::constants::INITIAL_RATING;
+use crate::constants::{INITIAL_RATING, MAX_RATING, MIN_RATING};
 use crate::state::Profile;
 
 /// Updates Elo ratings, win/loss/draw records, streaks, and active room pointers for both match players.
@@ -53,43 +53,59 @@ pub fn update_ratings_and_stats_raw(
 
     match winner_opt {
         Some(0) => {
-            profile_0.wins = profile_0.wins.saturating_add(1);
-            profile_0.streak = profile_0.streak.saturating_add(1);
+            profile_0.wins = profile_0.wins.checked_add(1).unwrap_or(u32::MAX);
+            profile_0.streak = profile_0.streak.checked_add(1).unwrap_or(u32::MAX);
             if profile_0.streak > profile_0.best_streak {
                 profile_0.best_streak = profile_0.streak;
             }
 
-            profile_1.losses = profile_1.losses.saturating_add(1);
+            profile_1.losses = profile_1.losses.checked_add(1).unwrap_or(u32::MAX);
             profile_1.streak = 0;
 
             if is_skill {
                 let diff = (profile_1.rating as i32 - profile_0.rating as i32) / 25;
                 let change = (16 + diff).clamp(4, 32) as u16;
-                profile_0.rating = profile_0.rating.saturating_add(change);
-                profile_1.rating = profile_1.rating.saturating_sub(change);
+                profile_0.rating = profile_0
+                    .rating
+                    .checked_add(change)
+                    .map(|r| r.min(MAX_RATING))
+                    .unwrap_or(MAX_RATING);
+                profile_1.rating = profile_1
+                    .rating
+                    .checked_sub(change)
+                    .map(|r| r.max(MIN_RATING))
+                    .unwrap_or(MIN_RATING);
             }
         }
         Some(1) => {
-            profile_1.wins = profile_1.wins.saturating_add(1);
-            profile_1.streak = profile_1.streak.saturating_add(1);
+            profile_1.wins = profile_1.wins.checked_add(1).unwrap_or(u32::MAX);
+            profile_1.streak = profile_1.streak.checked_add(1).unwrap_or(u32::MAX);
             if profile_1.streak > profile_1.best_streak {
                 profile_1.best_streak = profile_1.streak;
             }
 
-            profile_0.losses = profile_0.losses.saturating_add(1);
+            profile_0.losses = profile_0.losses.checked_add(1).unwrap_or(u32::MAX);
             profile_0.streak = 0;
 
             if is_skill {
                 let diff = (profile_0.rating as i32 - profile_1.rating as i32) / 25;
                 let change = (16 + diff).clamp(4, 32) as u16;
-                profile_1.rating = profile_1.rating.saturating_add(change);
-                profile_0.rating = profile_0.rating.saturating_sub(change);
+                profile_1.rating = profile_1
+                    .rating
+                    .checked_add(change)
+                    .map(|r| r.min(MAX_RATING))
+                    .unwrap_or(MAX_RATING);
+                profile_0.rating = profile_0
+                    .rating
+                    .checked_sub(change)
+                    .map(|r| r.max(MIN_RATING))
+                    .unwrap_or(MIN_RATING);
             }
         }
         _ => {
-            profile_0.draws = profile_0.draws.saturating_add(1);
+            profile_0.draws = profile_0.draws.checked_add(1).unwrap_or(u32::MAX);
             profile_0.streak = 0;
-            profile_1.draws = profile_1.draws.saturating_add(1);
+            profile_1.draws = profile_1.draws.checked_add(1).unwrap_or(u32::MAX);
             profile_1.streak = 0;
         }
     }

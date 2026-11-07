@@ -30,6 +30,9 @@ const GAMES = [
   { id: 3, name: 'Dice Duel', desc: 'Provably fair high roller', skill: false },
 ];
 
+/**
+ * Main game lobby for matchmaking, custom room creation, and game/tier selection.
+ */
 export function SolduelLobby() {
   const router = useRouter();
   const searchParams = useSearchParams();

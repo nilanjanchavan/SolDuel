@@ -86,6 +86,8 @@ export function useRoomAccount(address: string) {
   return {
     room: query.data,
     isLoading: query.isLoading,
+    isError: query.isError,
+    isAccountClosed: query.isSuccess && query.data === null,
     refetch: query.refetch,
     roomPubkey,
   };

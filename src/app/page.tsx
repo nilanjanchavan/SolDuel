@@ -1,6 +1,9 @@
 import { Suspense } from 'react';
 import { SolduelLobby } from '@/components/solduel/solduel-lobby';
 
+/**
+ * Root home page rendering the matchmaking and custom room lobby.
+ */
 export default function Home() {
   return (
     <Suspense
