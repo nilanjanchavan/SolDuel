@@ -235,6 +235,13 @@ export function useProfileAccount(address: string) {
     },
     enabled: !!parsedPubkey,
     staleTime: 60000,
+    refetchInterval: (queryState) => {
+      // Periodically recheck while classified as wallet without a direct PDA
+      if (queryState.state.data && !queryState.state.data.isDirectPda) {
+        return 5000;
+      }
+      return false;
+    },
   });
 
   const profilePda = pdaQuery.data?.pda ?? null;
