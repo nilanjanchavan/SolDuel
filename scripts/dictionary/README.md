@@ -111,7 +111,10 @@ In Word Chain, each word must start with the previous word's last two letters if
 ## 6. Sharded Static Files (`public/dictionary/`)
 
 To prevent the client browser from loading the entire multi-megabyte proof set at once:
-- Proofs are sharded by their first two letters into `public/dictionary/shards/<prefix>.json`.
+- The 257 two-letter prefixes that satisfy the Word Chain rule ($\ge 10$ words) have their own dedicated shard: `public/dictionary/shards/<prefix>.json`.
+- Rare prefixes ($< 10$ words, such as `ng` with 3 words) are grouped together in `public/dictionary/shards/_rare.json`.
+- This ensures 100% of dictionary words have static proofs while keeping the total shard file count at 258 files, well within static asset and repository limits.
 - When a player submits a move starting with prefix `st`, only `shards/st.json` is fetched.
 - `public/dictionary/root.json` holds the root metadata and prefix bitset.
 - `public/dictionary/words.json` provides the complete word array for bot vocabulary.
+

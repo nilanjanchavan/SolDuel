@@ -54,10 +54,13 @@ export function buildDictionary(
   }
 
   const flagsBuffer = Buffer.alloc(85, 0); // 85 bytes * 8 bits = 680 bits
-  let validPrefixesCount = 0;
+  const validPrefixes = new Set<string>();
   for (let i = 0; i < 676; i++) {
     if (counts[i] >= 10) {
-      validPrefixesCount++;
+      const c0 = String.fromCharCode(97 + Math.floor(i / 26));
+      const c1 = String.fromCharCode(97 + (i % 26));
+      validPrefixes.add(`${c0}${c1}`);
+
       const byteIdx = Math.floor(i / 8);
       const bitIdx = i % 8;
       flagsBuffer[byteIdx] |= 1 << bitIdx;
@@ -74,9 +77,11 @@ export function buildDictionary(
   const estimatedTxSize = proofBytes + 25 + 250;
   const fitsInTransaction = estimatedTxSize <= 1232;
 
-  // Write outputs
-  fs.mkdirSync(outputDir, { recursive: true });
+  // Clean old shards
   const shardsDir = path.join(outputDir, 'shards');
+  if (fs.existsSync(shardsDir)) {
+    fs.rmSync(shardsDir, { recursive: true, force: true });
+  }
   fs.mkdirSync(shardsDir, { recursive: true });
 
   // 1. root.json
@@ -84,7 +89,7 @@ export function buildDictionary(
     root: rootHex,
     depth,
     wordCount: words.length,
-    validPrefixesCount,
+    validPrefixesCount: validPrefixes.size,
     flagsHex,
     proofBytes,
     fitsInTransaction,
@@ -94,13 +99,17 @@ export function buildDictionary(
   // 2. words.json (for bot vocabulary)
   fs.writeFileSync(path.join(outputDir, 'words.json'), JSON.stringify(words));
 
-  // 3. Sharded per-word proofs (sharded by first two letters)
+  // 3. Sharded per-word proofs:
+  // - Prefixes with >= 10 words get dedicated shards (`<prefix>.json`, 257 files)
+  // - Rare prefixes (< 10 words, like 'ng') are grouped in `_rare.json`
+  // Keeps total file count at 258 shards (under repository review limits)
   const shards: Record<string, Record<string, string[]>> = {};
   for (let i = 0; i < words.length; i++) {
     const w = words[i];
     const prefix = w.slice(0, 2);
-    if (!shards[prefix]) {
-      shards[prefix] = {};
+    const shardKey = validPrefixes.has(prefix) ? prefix : '_rare';
+    if (!shards[shardKey]) {
+      shards[shardKey] = {};
     }
 
     const proof: string[] = [];
@@ -113,13 +122,13 @@ export function buildDictionary(
       }
       idx = Math.floor(idx / 2);
     }
-    shards[prefix][w] = proof;
+    shards[shardKey][w] = proof;
   }
 
-  for (const prefix of Object.keys(shards)) {
+  for (const shardKey of Object.keys(shards)) {
     fs.writeFileSync(
-      path.join(shardsDir, `${prefix}.json`),
-      JSON.stringify(shards[prefix])
+      path.join(shardsDir, `${shardKey}.json`),
+      JSON.stringify(shards[shardKey])
     );
   }
 
@@ -127,7 +136,7 @@ export function buildDictionary(
     wordCount: words.length,
     rootHex,
     depth,
-    validPrefixesCount,
+    validPrefixesCount: validPrefixes.size,
     flagsHex,
     flagsBuffer,
     fitsInTransaction,

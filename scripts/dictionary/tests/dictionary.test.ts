@@ -44,6 +44,7 @@ describe('Dictionary and Merkle Tree Tests', () => {
     expect(rootMeta.root).toMatch(/^[0-9a-f]{64}$/);
     expect(rootMeta.depth).toBe(18);
     expect(rootMeta.wordCount).toBe(172727);
+    expect(rootMeta.validPrefixesCount).toBe(257);
     expect(rootMeta.proofBytes).toBe(18 * 32);
     expect(rootMeta.fitsInTransaction).toBe(true);
   });
@@ -91,6 +92,17 @@ describe('Dictionary and Merkle Tree Tests', () => {
       const isValid = verifyProof(word, proof, rootMeta.root);
       expect(isValid).toBe(true);
     }
+  });
+
+  it('verifies rare prefix words in _rare shard', () => {
+    const rareShardPath = path.join(shardsDir, '_rare.json');
+    expect(fs.existsSync(rareShardPath)).toBe(true);
+    const rareShard = JSON.parse(fs.readFileSync(rareShardPath, 'utf-8'));
+
+    // "ngwee" starts with "ng" (< 10 words)
+    expect(rareShard).toHaveProperty('ngwee');
+    const isValid = verifyProof('ngwee', rareShard['ngwee'], rootMeta.root);
+    expect(isValid).toBe(true);
   });
 
   it('rejects tampered or invalid words', () => {
