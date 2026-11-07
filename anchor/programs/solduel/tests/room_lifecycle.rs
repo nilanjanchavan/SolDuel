@@ -270,7 +270,7 @@ fn test_rating_and_streak_updates() {
     );
 
     // Player 0 wins skill game
-    update_ratings_and_stats_raw(&account_0, &account_1, Some(0), true).unwrap();
+    update_ratings_and_stats_raw(&account_0, &account_1, Some(0), true, false, 0, false).unwrap();
 
     let updated_0_wins = u32::from_le_bytes(data_0[8..12].try_into().unwrap());
     let updated_0_rating = u16::from_le_bytes(data_0[20..22].try_into().unwrap());

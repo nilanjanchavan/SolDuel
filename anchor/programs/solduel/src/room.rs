@@ -135,6 +135,20 @@ pub fn game_laggard(game: u8, state: &[u8]) -> Result<Option<u8>> {
     }
 }
 
+/// Determines if a game outcome was a flawless win (e.g. Word Chain with 0 strikes).
+pub fn game_flawless_win(game: u8, state: &[u8], winner: u8) -> bool {
+    if game == 255 {
+        return false;
+    }
+    match GameKind::from_u8(game) {
+        Some(GameKind::ConnectFour) => ConnectFour::flawless_win(state, winner),
+        Some(GameKind::WordChain) => WordChain::flawless_win(state, winner),
+        Some(GameKind::Rps) => RockPaperScissors::flawless_win(state, winner),
+        Some(GameKind::Dice) => DiceDuel::flawless_win(state, winner),
+        None => false,
+    }
+}
+
 /// Final outcome of a match.
 pub enum MatchResult {
     Win(u8), // player index 0 | 1
@@ -714,7 +728,22 @@ pub fn finish_room(
         MatchResult::Win(idx) => Some(idx),
         MatchResult::Draw => None,
     };
-    update_ratings_and_stats_raw(prof_0_acc, prof_1_acc, winner_opt, is_skill)?;
+    let is_flawless = if let Some(w) = winner_opt {
+        game_flawless_win(room.game, &room.state, w)
+    } else {
+        false
+    };
+    let is_direct_challenge = room.allowed_opponent.is_some();
+
+    update_ratings_and_stats_raw(
+        prof_0_acc,
+        prof_1_acc,
+        winner_opt,
+        is_skill,
+        is_direct_challenge,
+        room.tier,
+        is_flawless,
+    )?;
 
     // Execute payouts / refunds
     match result {

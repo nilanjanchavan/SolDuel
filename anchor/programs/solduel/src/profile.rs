@@ -1,5 +1,7 @@
 use anchor_lang::prelude::*;
-use crate::constants::INITIAL_RATING;
+use crate::constants::{
+    BADGE_3_WIN_STREAK, BADGE_FIRST_WIN, BADGE_HIGH_ROLLER, BADGE_WORD_MASTER, INITIAL_RATING,
+};
 use crate::state::Profile;
 
 pub fn update_ratings_and_stats_raw(
@@ -7,9 +9,19 @@ pub fn update_ratings_and_stats_raw(
     prof_1_acc: &AccountInfo,
     winner_opt: Option<u8>,
     is_skill: bool,
+    is_direct_challenge: bool,
+    tier: u8,
+    is_flawless_win: bool,
 ) -> Result<()> {
     // Both profiles must have at least Profile::LEN bytes
     if prof_0_acc.data_len() < Profile::LEN || prof_1_acc.data_len() < Profile::LEN {
+        return Ok(());
+    }
+
+    // Handle edge case where both profile accounts are the same
+    if prof_0_acc.key == prof_1_acc.key {
+        let mut data = prof_0_acc.try_borrow_mut_data()?;
+        data[34..66].copy_from_slice(Pubkey::default().as_ref());
         return Ok(());
     }
 
@@ -61,9 +73,27 @@ pub fn update_ratings_and_stats_raw(
             profile_1.losses = profile_1.losses.saturating_add(1);
             profile_1.streak = 0;
 
+            // Badges for winner (Player 0)
+            if profile_0.wins >= 1 {
+                profile_0.badges |= BADGE_FIRST_WIN;
+            }
+            if profile_0.streak >= 3 {
+                profile_0.badges |= BADGE_3_WIN_STREAK;
+            }
+            if is_flawless_win {
+                profile_0.badges |= BADGE_WORD_MASTER;
+            }
+            if tier == 2 {
+                profile_0.badges |= BADGE_HIGH_ROLLER;
+            }
+
+            // Skill games rating update
             if is_skill {
                 let diff = (profile_1.rating as i32 - profile_0.rating as i32) / 25;
-                let change = (16 + diff).clamp(4, 32) as u16;
+                let mut change = (16 + diff).clamp(4, 32) as u16;
+                if is_direct_challenge {
+                    change = (change / 2).max(2);
+                }
                 profile_0.rating = profile_0.rating.saturating_add(change);
                 profile_1.rating = profile_1.rating.saturating_sub(change);
             }
@@ -78,9 +108,27 @@ pub fn update_ratings_and_stats_raw(
             profile_0.losses = profile_0.losses.saturating_add(1);
             profile_0.streak = 0;
 
+            // Badges for winner (Player 1)
+            if profile_1.wins >= 1 {
+                profile_1.badges |= BADGE_FIRST_WIN;
+            }
+            if profile_1.streak >= 3 {
+                profile_1.badges |= BADGE_3_WIN_STREAK;
+            }
+            if is_flawless_win {
+                profile_1.badges |= BADGE_WORD_MASTER;
+            }
+            if tier == 2 {
+                profile_1.badges |= BADGE_HIGH_ROLLER;
+            }
+
+            // Skill games rating update
             if is_skill {
                 let diff = (profile_0.rating as i32 - profile_1.rating as i32) / 25;
-                let change = (16 + diff).clamp(4, 32) as u16;
+                let mut change = (16 + diff).clamp(4, 32) as u16;
+                if is_direct_challenge {
+                    change = (change / 2).max(2);
+                }
                 profile_1.rating = profile_1.rating.saturating_add(change);
                 profile_0.rating = profile_0.rating.saturating_sub(change);
             }
@@ -90,6 +138,7 @@ pub fn update_ratings_and_stats_raw(
             profile_0.streak = 0;
             profile_1.draws = profile_1.draws.saturating_add(1);
             profile_1.streak = 0;
+            // No rating change on draw
         }
     }
 

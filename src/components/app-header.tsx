@@ -2,6 +2,7 @@
 import { usePathname } from 'next/navigation'
 import { useState } from 'react'
 import Link from 'next/link'
+import { useWallet } from '@solana/wallet-adapter-react'
 import { Button } from '@/components/ui/button'
 import { Menu, X } from 'lucide-react'
 import { ThemeSelect } from '@/components/theme-select'
@@ -10,6 +11,7 @@ import { WalletButton } from '@/components/solana/solana-provider'
 
 export function AppHeader({ links = [] }: { links: { label: string; path: string }[] }) {
   const pathname = usePathname()
+  const { publicKey } = useWallet()
   const [showMenu, setShowMenu] = useState(false)
 
   function isActive(path: string) {
@@ -35,6 +37,16 @@ export function AppHeader({ links = [] }: { links: { label: string; path: string
                   </Link>
                 </li>
               ))}
+              {publicKey && (
+                <li>
+                  <Link
+                    className={`hover:text-neutral-500 dark:hover:text-white ${isActive(`/profile/${publicKey.toBase58()}`) ? 'text-neutral-500 dark:text-white' : ''}`}
+                    href={`/profile/${publicKey.toBase58()}`}
+                  >
+                    Profile
+                  </Link>
+                </li>
+              )}
             </ul>
           </div>
         </div>
@@ -64,6 +76,17 @@ export function AppHeader({ links = [] }: { links: { label: string; path: string
                     </Link>
                   </li>
                 ))}
+                {publicKey && (
+                  <li>
+                    <Link
+                      className={`hover:text-neutral-500 dark:hover:text-white block text-lg py-2 ${isActive(`/profile/${publicKey.toBase58()}`) ? 'text-neutral-500 dark:text-white' : ''} `}
+                      href={`/profile/${publicKey.toBase58()}`}
+                      onClick={() => setShowMenu(false)}
+                    >
+                      Profile
+                    </Link>
+                  </li>
+                )}
               </ul>
               <div className="flex flex-col gap-4">
                 <WalletButton />

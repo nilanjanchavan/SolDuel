@@ -46,7 +46,7 @@ pub mod solduel {
         room::handle_claim_timeout(ctx)
     }
 
-    pub fn mint_badge(ctx: Context<MintBadge>, badge: u8) -> Result<()> {
+    pub fn mint_badge<'info>(ctx: Context<'info, MintBadge<'info>>, badge: u8) -> Result<()> {
         badges::handle_mint_badge(ctx, badge)
     }
 }
