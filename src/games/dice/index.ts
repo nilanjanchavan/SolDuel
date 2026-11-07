@@ -1,39 +1,203 @@
-import React from 'react';
-import { GameEngine, GameKind, GameUI, Outcome } from '../types';
+import React from 'react'
+import { GameEngine, GameKind, GameUI, Outcome } from '../types'
+import { DiceMove, DiceState } from './types'
+import { getBotDiceMove, computeDiceHash } from './bot'
+import { DiceBoard } from './ui'
 
-export interface DiceState {
-  rolls: [number, number];
-}
+export * from './types'
+export * from './bot'
+export * from './ui'
 
-export type DiceMove = { secret: Uint8Array };
+export const MAX_DRAWS = 5
 
 export const diceEngine: GameEngine<DiceState, DiceMove> = {
   kind: GameKind.Dice,
   isSkill: false,
-  init(firstPlayer: 0 | 1): DiceState {
+
+  init(_firstPlayer: 0 | 1): DiceState {
     return {
+      round: 0,
+      phase: 'commit',
       rolls: [0, 0],
-    };
+      drawCount: 0,
+      commits: [false, false],
+      reveals: [false, false],
+      commitHashes: [null, null],
+      room: null,
+    }
   },
+
   apply(s: DiceState, p: 0 | 1, m: DiceMove): { state: DiceState; outcome: Outcome } {
-    return { state: s, outcome: 'continue' };
+    if (m.type === 'commit') {
+      if (s.phase !== 'commit') {
+        throw new Error('Not commit phase')
+      }
+      if (s.commits[p]) {
+        throw new Error(`Player ${p} already committed`)
+      }
+
+      const newCommits: [boolean, boolean] = [...s.commits]
+      newCommits[p] = true
+      const newCommitHashes: [Uint8Array | null, Uint8Array | null] = s.commitHashes
+        ? [...s.commitHashes]
+        : [null, null]
+      newCommitHashes[p] = m.hash
+      const bothCommitted = newCommits[0] && newCommits[1]
+
+      return {
+        state: {
+          ...s,
+          room: s.room || m.room,
+          commits: newCommits,
+          commitHashes: newCommitHashes,
+          phase: bothCommitted ? 'reveal' : 'commit',
+        },
+        outcome: 'continue',
+      }
+    } else if (m.type === 'reveal') {
+      if (s.phase !== 'reveal') {
+        throw new Error('Not reveal phase')
+      }
+      if (s.reveals[p]) {
+        throw new Error(`Player ${p} already revealed`)
+      }
+
+      // Validate choice is a 6-sided die roll (1..=6)
+      if (m.choice < 1 || m.choice > 6) {
+        return {
+          state: s,
+          outcome: { win: (1 - p) as 0 | 1 },
+        }
+      }
+
+      // Verify commit hash if available
+      if (s.commitHashes && s.commitHashes[p]) {
+        const expected = s.commitHashes[p]!
+        const actual = computeDiceHash(s.room || new Uint8Array(32), p, m.choice, m.salt)
+        let match = true
+        for (let i = 0; i < 32; i++) {
+          if (expected[i] !== actual[i]) {
+            match = false
+            break
+          }
+        }
+        if (!match) {
+          return {
+            state: s,
+            outcome: { win: (1 - p) as 0 | 1 },
+          }
+        }
+      }
+
+      const newReveals: [boolean, boolean] = [...s.reveals]
+      newReveals[p] = true
+      const newRolls: [number, number] = [...s.rolls]
+      newRolls[p] = m.choice
+
+      const bothRevealed = newReveals[0] && newReveals[1]
+      if (!bothRevealed) {
+        return {
+          state: {
+            ...s,
+            reveals: newReveals,
+            rolls: newRolls,
+          },
+          outcome: 'continue',
+        }
+      }
+
+      // Both revealed: evaluate duel
+      const r0 = newRolls[0]
+      const r1 = newRolls[1]
+
+      if (r0 > r1) {
+        return {
+          state: { ...s, rolls: newRolls, reveals: newReveals },
+          outcome: { win: 0 },
+        }
+      } else if (r1 > r0) {
+        return {
+          state: { ...s, rolls: newRolls, reveals: newReveals },
+          outcome: { win: 1 },
+        }
+      } else {
+        // Tied rolls: replay drawn round with a cap
+        const newDraws = s.drawCount + 1
+        if (newDraws >= MAX_DRAWS) {
+          return {
+            state: { ...s, rolls: newRolls, reveals: newReveals, drawCount: newDraws },
+            outcome: 'draw',
+          }
+        }
+
+        return {
+          state: {
+            ...s,
+            round: s.round + 1,
+            phase: 'commit',
+            commits: [false, false],
+            reveals: [false, false],
+            commitHashes: [null, null],
+            rolls: newRolls,
+            drawCount: newDraws,
+          },
+          outcome: 'continue',
+        }
+      }
+    } else {
+      throw new Error('Unknown move type')
+    }
   },
+
   encodeAction(m: DiceMove): Uint8Array {
-    return m.secret;
+    if (m.type === 'commit') {
+      const buf = new Uint8Array(65)
+      buf[0] = 0 // ACTION_TAG_COMMIT
+      buf.set(m.room, 1)
+      buf.set(m.hash, 33)
+      return buf
+    } else {
+      const buf = new Uint8Array(34)
+      buf[0] = 1 // ACTION_TAG_REVEAL
+      buf[1] = m.choice
+      buf.set(m.salt, 2)
+      return buf
+    }
   },
+
   decodeState(buf: Uint8Array): DiceState {
+    const room = buf.slice(0, 32)
+    const round = buf[32]
+    const phase: 'commit' | 'reveal' = buf[33] === 1 ? 'reveal' : 'commit'
+    const commit0 = buf[34] === 1
+    const commit1 = buf[35] === 1
+    const commitHash0 = commit0 ? buf.slice(36, 68) : null
+    const commitHash1 = commit1 ? buf.slice(68, 100) : null
+    const reveal0 = buf[100] === 1
+    const reveal1 = buf[101] === 1
+    const roll0 = buf[104]
+    const roll1 = buf[105]
+    const drawCount = buf[106]
+
     return {
-      rolls: [0, 0],
-    };
+      round,
+      phase,
+      rolls: [roll0, roll1],
+      drawCount,
+      commits: [commit0, commit1],
+      reveals: [reveal0, reveal1],
+      commitHashes: [commitHash0, commitHash1],
+      room,
+    }
   },
+
   bot(level: 'easy' | 'medium' | 'hard') {
-    return (_s: DiceState, _p: 0 | 1) => ({ secret: new Uint8Array(32) });
+    return (s: DiceState, p: 0 | 1) => getBotDiceMove(level, s, p)
   },
-};
+}
 
 export const diceUI: GameUI<DiceState, DiceMove> = {
-  Board({ state, me, onMove, disabled }) {
-    return React.createElement('div', { className: 'dice-board' }, 'Dice Duel Board Stub');
+  Board(props) {
+    return React.createElement(DiceBoard, props)
   },
-};
-
+}
