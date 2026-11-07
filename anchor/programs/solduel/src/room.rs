@@ -9,7 +9,8 @@ use crate::profile::update_ratings_and_stats_raw;
 use crate::state::*;
 use crate::{CancelRoom, ClaimTimeout, CreateRoom, GameAction, JoinRoom, QuickPlay};
 
-/// Dummy game implementation for testing room lifecycle and dispatch
+/// Dummy game implementation for testing room lifecycle and dispatch.
+/// Enabled for unit/integration tests or test feature.
 pub struct DummyGame;
 
 impl Game for DummyGame {
@@ -40,9 +41,6 @@ impl Game for DummyGame {
     }
 
     fn laggard(state: &[u8]) -> Option<u8> {
-        // If state[1] == 1 => player 0 is holding things up
-        // If state[1] == 2 => player 1 is holding things up
-        // Else None => both
         match state.get(1).copied().unwrap_or(0) {
             1 => Some(0),
             2 => Some(1),
@@ -51,6 +49,7 @@ impl Game for DummyGame {
     }
 }
 
+/// Returns the stake amount in lamports for the given tier.
 pub fn get_tier_stake_lamports(tier: u8) -> Result<u64> {
     match tier {
         0 => Ok(100 * LAMPORTS_PER_COIN),
@@ -60,6 +59,7 @@ pub fn get_tier_stake_lamports(tier: u8) -> Result<u64> {
     }
 }
 
+/// Checks whether a given game kind is a skill game.
 pub fn game_is_skill(game: u8) -> Result<bool> {
     if game == 255 {
         return Ok(DummyGame::is_skill());
@@ -73,6 +73,7 @@ pub fn game_is_skill(game: u8) -> Result<bool> {
     }
 }
 
+/// Initializes state for the given game kind.
 pub fn game_init(game: u8, state: &mut [u8], first_player: u8, now: i64) -> Result<()> {
     if game == 255 {
         return DummyGame::init(state, first_player, now);
@@ -86,6 +87,7 @@ pub fn game_init(game: u8, state: &mut [u8], first_player: u8, now: i64) -> Resu
     }
 }
 
+/// Applies a player move to the given game state.
 pub fn game_apply(
     game: u8,
     state: &mut [u8],
@@ -105,6 +107,7 @@ pub fn game_apply(
     }
 }
 
+/// Returns move deadline duration in seconds for the given game state.
 pub fn game_deadline_secs(game: u8, state: &[u8]) -> Result<i64> {
     if game == 255 {
         return Ok(DummyGame::deadline_secs(state));
@@ -118,6 +121,7 @@ pub fn game_deadline_secs(game: u8, state: &[u8]) -> Result<i64> {
     }
 }
 
+/// Determines who is holding things up when a timeout is claimed.
 pub fn game_laggard(game: u8, state: &[u8]) -> Result<Option<u8>> {
     if game == 255 {
         return Ok(DummyGame::laggard(state));
@@ -131,11 +135,13 @@ pub fn game_laggard(game: u8, state: &[u8]) -> Result<Option<u8>> {
     }
 }
 
+/// Final outcome of a match.
 pub enum MatchResult {
     Win(u8), // player index 0 | 1
     Draw,
 }
 
+/// Handler for create_room instruction.
 pub fn handle_create_room(
     ctx: Context<CreateRoom>,
     game: u8,
@@ -192,6 +198,7 @@ pub fn handle_create_room(
     Ok(())
 }
 
+/// Handler for join_room instruction.
 pub fn handle_join_room(ctx: Context<JoinRoom>) -> Result<()> {
     let room = &mut ctx.accounts.room;
     if room.status != RoomStatus::Open {
@@ -254,6 +261,7 @@ pub fn handle_join_room(ctx: Context<JoinRoom>) -> Result<()> {
     Ok(())
 }
 
+/// Handler for quick_play instruction.
 pub fn handle_quick_play(ctx: Context<QuickPlay>, game: u8, tier: u8) -> Result<()> {
     if game != 255 && GameKind::from_u8(game).is_none() {
         return err!(SolduelError::InvalidGame);
@@ -317,7 +325,6 @@ pub fn handle_quick_play(ctx: Context<QuickPlay>, game: u8, tier: u8) -> Result<
             if old_room_info.key() == spot_room_pubkey {
                 let mut old_room_data = old_room_info.try_borrow_mut_data()?;
                 if old_room_data.len() >= MatchRoom::LEN {
-                    // Check creator
                     let mut creator_bytes = [0u8; 32];
                     creator_bytes.copy_from_slice(&old_room_data[10..42]);
                     let old_creator_pubkey = Pubkey::new_from_array(creator_bytes);
@@ -327,7 +334,6 @@ pub fn handle_quick_play(ctx: Context<QuickPlay>, game: u8, tier: u8) -> Result<
                         .iter()
                         .find(|a| a.key() == old_creator_pubkey)
                     {
-                        // Refund old room lamports to old creator
                         let refund_amount = old_room_info.lamports();
                         **old_room_info.try_borrow_mut_lamports()? = 0;
                         **old_creator_info.try_borrow_mut_lamports()? = old_creator_info
@@ -335,7 +341,6 @@ pub fn handle_quick_play(ctx: Context<QuickPlay>, game: u8, tier: u8) -> Result<
                             .checked_add(refund_amount)
                             .ok_or(SolduelError::MathOverflow)?;
 
-                        // Mark old room cancelled
                         old_room_data[74] = RoomStatus::Cancelled as u8;
                     }
                 }
@@ -354,28 +359,27 @@ pub fn handle_quick_play(ctx: Context<QuickPlay>, game: u8, tier: u8) -> Result<
             if room_info.key() != spot_room_pubkey {
                 return err!(SolduelError::RoomNotOpen);
             }
-
-            let room_data = room_info.try_borrow_data()?;
-            if room_data.len() < MatchRoom::LEN {
+            if room_info.owner != ctx.program_id {
                 return err!(SolduelError::RoomNotOpen);
             }
 
-            // Verify status is Open (byte 74)
-            let status = room_data[74];
-            if status != RoomStatus::Open as u8 {
+            let mut room_account: MatchRoom = {
+                let data = room_info.try_borrow_data()?;
+                if data.len() < MatchRoom::LEN {
+                    return err!(SolduelError::RoomNotOpen);
+                }
+                let mut slice = &data[8..];
+                MatchRoom::deserialize(&mut slice)?
+            };
+
+            if room_account.status != RoomStatus::Open {
                 return err!(SolduelError::RoomNotOpen);
             }
-
-            // Verify creator is not this player
-            let mut creator_bytes = [0u8; 32];
-            creator_bytes.copy_from_slice(&room_data[10..42]);
-            let creator_pubkey = Pubkey::new_from_array(creator_bytes);
-            if creator_pubkey == player_info.key() {
+            if room_account.creator == player_info.key() {
                 return err!(SolduelError::AlreadyInActiveRoom);
             }
 
             // Transfer stake to room
-            drop(room_data);
             let transfer_ix = anchor_lang::solana_program::system_instruction::transfer(
                 &player_info.key(),
                 &room_info.key(),
@@ -390,30 +394,24 @@ pub fn handle_quick_play(ctx: Context<QuickPlay>, game: u8, tier: u8) -> Result<
                 ],
             )?;
 
-            // Re-borrow and update room to Active
-            let mut room_data = room_info.try_borrow_mut_data()?;
             let first_player = ((clock.slot ^ now as u64) & 1) as u8;
-
-            // players[1] at 42..74
-            room_data[42..74].copy_from_slice(player_info.key().as_ref());
-            // status at 74
-            room_data[74] = RoomStatus::Active as u8;
-            // first_player at 108
-            room_data[108] = first_player;
-            // last_action_ts at 117..125
-            room_data[117..125].copy_from_slice(&now.to_le_bytes());
-
-            // Initialize game state in buffer (bytes 133..1157)
-            let mut state_buf = [0u8; GAME_STATE_BUFFER_SIZE];
-            state_buf.copy_from_slice(&room_data[133..133 + GAME_STATE_BUFFER_SIZE]);
-            game_init(game, &mut state_buf, first_player, now)?;
-            let deadline_secs = game_deadline_secs(game, &state_buf)?;
+            game_init(game, &mut room_account.state, first_player, now)?;
+            let deadline_secs = game_deadline_secs(game, &room_account.state)?;
             let deadline_ts = now
                 .checked_add(deadline_secs)
                 .ok_or(SolduelError::MathOverflow)?;
 
-            room_data[125..133].copy_from_slice(&deadline_ts.to_le_bytes());
-            room_data[133..133 + GAME_STATE_BUFFER_SIZE].copy_from_slice(&state_buf);
+            room_account.players[1] = player_info.key();
+            room_account.status = RoomStatus::Active;
+            room_account.first_player = first_player;
+            room_account.last_action_ts = now;
+            room_account.deadline_ts = deadline_ts;
+
+            // Write back to room account
+            let mut room_data = room_info.try_borrow_mut_data()?;
+            let mut disc = MatchRoom::DISCRIMINATOR.to_vec();
+            room_account.serialize(&mut disc)?;
+            room_data[..disc.len()].copy_from_slice(&disc);
             drop(room_data);
 
             // Clear waiting spot room to default
@@ -435,28 +433,31 @@ pub fn handle_quick_play(ctx: Context<QuickPlay>, game: u8, tier: u8) -> Result<
         return err!(SolduelError::InvalidGame);
     }
 
-    // Create room account if not exists
     let room_info = &ctx.accounts.room;
-    if room_info.data_is_empty() {
-        let rent = Rent::get()?;
-        let lamports = rent.minimum_balance(MatchRoom::LEN);
-        let create_ix = anchor_lang::solana_program::system_instruction::create_account(
-            &player_info.key(),
-            &room_info.key(),
-            lamports,
-            MatchRoom::LEN as u64,
-            ctx.program_id,
-        );
-        anchor_lang::solana_program::program::invoke_signed(
-            &create_ix,
-            &[
-                player_info.to_account_info(),
-                room_info.to_account_info(),
-                system_program.to_account_info(),
-            ],
-            &[&[ROOM_SEED, player_info.key().as_ref(), &[room_bump]]],
-        )?;
+    // Reject if room account already exists and is non-empty
+    if !room_info.data_is_empty() {
+        return err!(SolduelError::AlreadyInActiveRoom);
     }
+
+    // Create room account if not exists
+    let rent = Rent::get()?;
+    let lamports = rent.minimum_balance(MatchRoom::LEN);
+    let create_ix = anchor_lang::solana_program::system_instruction::create_account(
+        &player_info.key(),
+        &room_info.key(),
+        lamports,
+        MatchRoom::LEN as u64,
+        ctx.program_id,
+    );
+    anchor_lang::solana_program::program::invoke_signed(
+        &create_ix,
+        &[
+            player_info.to_account_info(),
+            room_info.to_account_info(),
+            system_program.to_account_info(),
+        ],
+        &[&[ROOM_SEED, player_info.key().as_ref(), &[room_bump]]],
+    )?;
 
     // Transfer stake to room
     let transfer_ix = anchor_lang::solana_program::system_instruction::transfer(
@@ -535,6 +536,7 @@ pub fn handle_quick_play(ctx: Context<QuickPlay>, game: u8, tier: u8) -> Result<
     Ok(())
 }
 
+/// Handler for cancel_room instruction.
 pub fn handle_cancel_room(ctx: Context<CancelRoom>) -> Result<()> {
     let room = &mut ctx.accounts.room;
     if room.status != RoomStatus::Open {
@@ -544,7 +546,7 @@ pub fn handle_cancel_room(ctx: Context<CancelRoom>) -> Result<()> {
         return err!(SolduelError::NotAPlayer);
     }
 
-    // If quick play, clear waiting spot if passed
+    // If quick play, clear waiting spot if it matches this room
     if room.is_quick_play {
         let (expected_spot, _) = Pubkey::find_program_address(
             &[WAITING_SPOT_SEED, &[room.game], &[room.tier]],
@@ -554,7 +556,15 @@ pub fn handle_cancel_room(ctx: Context<CancelRoom>) -> Result<()> {
             if !spot_info.data_is_empty() {
                 let mut data = spot_info.try_borrow_mut_data()?;
                 if data.len() >= WaitingSpot::LEN {
-                    data[8..40].copy_from_slice(Pubkey::default().as_ref());
+                    let mut disc = [0u8; 8];
+                    disc.copy_from_slice(&data[0..8]);
+                    if disc == WaitingSpot::DISCRIMINATOR {
+                        let mut stored_room = [0u8; 32];
+                        stored_room.copy_from_slice(&data[8..40]);
+                        if Pubkey::new_from_array(stored_room) == room.key() {
+                            data[8..40].copy_from_slice(Pubkey::default().as_ref());
+                        }
+                    }
                 }
             }
         }
@@ -577,6 +587,7 @@ pub fn handle_cancel_room(ctx: Context<CancelRoom>) -> Result<()> {
     Ok(())
 }
 
+/// Handler for game_action instruction.
 pub fn handle_game_action(ctx: Context<GameAction>, data: Vec<u8>) -> Result<()> {
     let room = &mut ctx.accounts.room;
     if room.status != RoomStatus::Active {
@@ -618,6 +629,7 @@ pub fn handle_game_action(ctx: Context<GameAction>, data: Vec<u8>) -> Result<()>
     Ok(())
 }
 
+/// Handler for claim_timeout instruction.
 pub fn handle_claim_timeout(ctx: Context<ClaimTimeout>) -> Result<()> {
     let room = &mut ctx.accounts.room;
     if room.status != RoomStatus::Active {
@@ -649,7 +661,8 @@ pub fn handle_claim_timeout(ctx: Context<ClaimTimeout>) -> Result<()> {
     Ok(())
 }
 
-/// Internal finish step: payouts, refunds, rent return to creator, account closing, clearing active_room
+/// Internal finish step: payouts, refunds, rent return to creator, account closing, clearing active_room.
+/// Validates required accounts and writability before state changes.
 pub fn finish_room(
     room: &mut Account<'_, MatchRoom>,
     result: MatchResult,
@@ -662,70 +675,90 @@ pub fn finish_room(
     let room_lamports = room_info.lamports();
     let rent_lamports = room_lamports.saturating_sub(total_stake);
 
-    let player_0_info = remaining_accounts.iter().find(|a| a.key() == room.players[0]);
-    let player_1_info = remaining_accounts.iter().find(|a| a.key() == room.players[1]);
+    // Require both player accounts to be present and writable
+    let player_0_info = remaining_accounts
+        .iter()
+        .find(|a| a.key() == room.players[0])
+        .ok_or(SolduelError::NotAPlayer)?;
+    let player_1_info = remaining_accounts
+        .iter()
+        .find(|a| a.key() == room.players[1])
+        .ok_or(SolduelError::NotAPlayer)?;
 
-    if let (Some(p0), Some(p1)) = (player_0_info, player_1_info) {
-        match result {
-            MatchResult::Win(0) => {
-                // Player 0 gets total stake (2x) + rent as creator
-                let p0_payout = total_stake
-                    .checked_add(rent_lamports)
-                    .ok_or(SolduelError::MathOverflow)?;
-                **room_info.try_borrow_mut_lamports()? = 0;
-                **p0.try_borrow_mut_lamports()? = p0
-                    .lamports()
-                    .checked_add(p0_payout)
-                    .ok_or(SolduelError::MathOverflow)?;
-            }
-            MatchResult::Win(1) => {
-                // Player 1 gets total stake (2x); Player 0 gets rent back as creator
-                **room_info.try_borrow_mut_lamports()? = 0;
-                **p1.try_borrow_mut_lamports()? = p1
-                    .lamports()
-                    .checked_add(total_stake)
-                    .ok_or(SolduelError::MathOverflow)?;
-                **p0.try_borrow_mut_lamports()? = p0
-                    .lamports()
-                    .checked_add(rent_lamports)
-                    .ok_or(SolduelError::MathOverflow)?;
-            }
-            MatchResult::Draw | MatchResult::Win(_) => {
-                // Both refunded their stake; creator gets rent
-                **room_info.try_borrow_mut_lamports()? = 0;
-                **p1.try_borrow_mut_lamports()? = p1
-                    .lamports()
-                    .checked_add(tier_stake)
-                    .ok_or(SolduelError::MathOverflow)?;
-                let p0_refund = tier_stake
-                    .checked_add(rent_lamports)
-                    .ok_or(SolduelError::MathOverflow)?;
-                **p0.try_borrow_mut_lamports()? = p0
-                    .lamports()
-                    .checked_add(p0_refund)
-                    .ok_or(SolduelError::MathOverflow)?;
-            }
-        }
+    if !player_0_info.is_writable || !player_1_info.is_writable {
+        return err!(SolduelError::NotAPlayer);
     }
 
-    // Update profiles if provided in remaining accounts
+    // Require both profile accounts to be present and writable
     let is_skill = game_is_skill(room.game).unwrap_or(false);
     let (p0_profile_pda, _) =
         Pubkey::find_program_address(&[PROFILE_SEED, room.players[0].as_ref()], &crate::ID);
     let (p1_profile_pda, _) =
         Pubkey::find_program_address(&[PROFILE_SEED, room.players[1].as_ref()], &crate::ID);
 
-    let prof_0_acc = remaining_accounts.iter().find(|a| a.key() == p0_profile_pda);
-    let prof_1_acc = remaining_accounts.iter().find(|a| a.key() == p1_profile_pda);
+    let prof_0_acc = remaining_accounts
+        .iter()
+        .find(|a| a.key() == p0_profile_pda)
+        .ok_or(SolduelError::NotAPlayer)?;
+    let prof_1_acc = remaining_accounts
+        .iter()
+        .find(|a| a.key() == p1_profile_pda)
+        .ok_or(SolduelError::NotAPlayer)?;
 
-    if let (Some(prof_0), Some(prof_1)) = (prof_0_acc, prof_1_acc) {
-        let winner_opt = match result {
-            MatchResult::Win(idx) => Some(idx),
-            MatchResult::Draw => None,
-        };
-        update_ratings_and_stats_raw(prof_0, prof_1, winner_opt, is_skill)?;
+    if !prof_0_acc.is_writable || !prof_1_acc.is_writable {
+        return err!(SolduelError::NotAPlayer);
     }
 
+    // Update profiles first
+    let winner_opt = match result {
+        MatchResult::Win(idx) => Some(idx),
+        MatchResult::Draw => None,
+    };
+    update_ratings_and_stats_raw(prof_0_acc, prof_1_acc, winner_opt, is_skill)?;
+
+    // Execute payouts / refunds
+    match result {
+        MatchResult::Win(0) => {
+            // Player 0 gets total stake (2x) + rent as creator
+            let p0_payout = total_stake
+                .checked_add(rent_lamports)
+                .ok_or(SolduelError::MathOverflow)?;
+            **room_info.try_borrow_mut_lamports()? = 0;
+            **player_0_info.try_borrow_mut_lamports()? = player_0_info
+                .lamports()
+                .checked_add(p0_payout)
+                .ok_or(SolduelError::MathOverflow)?;
+        }
+        MatchResult::Win(1) => {
+            // Player 1 gets total stake (2x); Player 0 gets rent back as creator
+            **room_info.try_borrow_mut_lamports()? = 0;
+            **player_1_info.try_borrow_mut_lamports()? = player_1_info
+                .lamports()
+                .checked_add(total_stake)
+                .ok_or(SolduelError::MathOverflow)?;
+            **player_0_info.try_borrow_mut_lamports()? = player_0_info
+                .lamports()
+                .checked_add(rent_lamports)
+                .ok_or(SolduelError::MathOverflow)?;
+        }
+        MatchResult::Draw | MatchResult::Win(_) => {
+            // Both refunded their stake; creator gets rent
+            **room_info.try_borrow_mut_lamports()? = 0;
+            **player_1_info.try_borrow_mut_lamports()? = player_1_info
+                .lamports()
+                .checked_add(tier_stake)
+                .ok_or(SolduelError::MathOverflow)?;
+            let p0_refund = tier_stake
+                .checked_add(rent_lamports)
+                .ok_or(SolduelError::MathOverflow)?;
+            **player_0_info.try_borrow_mut_lamports()? = player_0_info
+                .lamports()
+                .checked_add(p0_refund)
+                .ok_or(SolduelError::MathOverflow)?;
+        }
+    }
+
+    // Mark room finished after all transfers and profile updates succeed
     room.status = RoomStatus::Finished;
 
     Ok(())

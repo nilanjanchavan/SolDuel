@@ -42,19 +42,17 @@ export function GetTestSolButton() {
       });
       toast.success('Received 1 Devnet SOL!');
       queryClient.invalidateQueries({ queryKey: ['wallet-balance'] });
-    } catch (err: any) {
-      console.warn('Airdrop failed, showing faucet fallback:', err);
-      toast.error(
-        'Devnet airdrop rate limit reached. Opening the official Solana Faucet...',
-        {
-          action: {
-            label: 'Open Faucet',
-            onClick: () => window.open('https://faucet.solana.com/', '_blank'),
-          },
-        }
-      );
-      // Fallback
-      window.open(`https://faucet.solana.com/?address=${publicKey.toBase58()}`, '_blank');
+    } catch (err: unknown) {
+      const errorMsg =
+        err instanceof Error ? err.message : 'Devnet airdrop request failed';
+      console.warn('Airdrop failed:', errorMsg);
+      const faucetUrl = `https://faucet.solana.com/?address=${publicKey.toBase58()}`;
+      toast.error(`Airdrop request failed: ${errorMsg}`, {
+        action: {
+          label: 'Open Official Faucet',
+          onClick: () => window.open(faucetUrl, '_blank'),
+        },
+      });
     } finally {
       setIsRequesting(false);
     }
@@ -81,15 +79,17 @@ export function GetTestSolButton() {
         )}
         <span>Get Test SOL</span>
       </Button>
-      <a
-        href="https://faucet.solana.com/"
-        target="_blank"
-        rel="noopener noreferrer"
-        className="text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-200 text-xs flex items-center gap-0.5"
-        title="External Solana Devnet Faucet"
-      >
-        <ExternalLink className="h-3.5 w-3.5" />
-      </a>
+      {publicKey && (
+        <a
+          href={`https://faucet.solana.com/?address=${publicKey.toBase58()}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-200 text-xs flex items-center gap-0.5"
+          title="Open Solana Devnet Faucet"
+        >
+          <ExternalLink className="h-3.5 w-3.5" />
+        </a>
+      )}
     </div>
   );
 }

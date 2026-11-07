@@ -90,3 +90,4 @@ export function useRoomAccount(address: string) {
     roomPubkey,
   };
 }
+

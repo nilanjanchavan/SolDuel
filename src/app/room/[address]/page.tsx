@@ -3,8 +3,7 @@
 import { use, useEffect, useState, useMemo } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { PublicKey, SystemProgram } from '@solana/web3.js';
-import { useWallet } from '@solana/wallet-adapter-react';
+import { PublicKey } from '@solana/web3.js';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -51,7 +50,15 @@ export default function RoomPage({
   const [isJoining, setIsJoining] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
   const [isClaimingTimeout, setIsClaimingTimeout] = useState(false);
-  const [nowTs, setNowTs] = useState<number>(Math.floor(Date.now() / 1000));
+  const [isSubmittingMove, setIsSubmittingMove] = useState(false);
+  const [nowTs, setNowTs] = useState<number>(() => Math.floor(Date.now() / 1000));
+  const [shareUrl, setShareUrl] = useState<string>('');
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      setShareUrl(window.location.href);
+    }
+  }, []);
 
   // Update clock every second
   useEffect(() => {
@@ -120,15 +127,15 @@ export default function RoomPage({
           room: roomPubkey,
           profile: myProfilePda,
           player: wallet.publicKey,
-          systemProgram: SystemProgram.programId,
         })
         .rpc();
 
       toast.success('Joined match! Game is now active.');
       refetch();
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Join error:', err);
-      toast.error(err.message || 'Failed to join match');
+      const msg = err instanceof Error ? err.message : 'Failed to join match';
+      toast.error(msg);
     } finally {
       setIsJoining(false);
     }
@@ -147,15 +154,15 @@ export default function RoomPage({
           room: roomPubkey,
           profile: myProfilePda,
           creator: wallet.publicKey,
-          systemProgram: SystemProgram.programId,
         })
         .rpc();
 
       toast.success('Room cancelled! Stakes and rent refunded.');
       refetch();
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Cancel error:', err);
-      toast.error(err.message || 'Failed to cancel room');
+      const msg = err instanceof Error ? err.message : 'Failed to cancel room';
+      toast.error(msg);
     } finally {
       setIsCancelling(false);
     }
@@ -186,9 +193,10 @@ export default function RoomPage({
 
       toast.success('Timeout claimed! Match settled.');
       refetch();
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Claim timeout error:', err);
-      toast.error(err.message || 'Failed to claim timeout');
+      const msg = err instanceof Error ? err.message : 'Failed to claim timeout';
+      toast.error(msg);
     } finally {
       setIsClaimingTimeout(false);
     }
@@ -197,6 +205,7 @@ export default function RoomPage({
   const handleGameAction = async (data: Uint8Array) => {
     if (!wallet.publicKey || !roomPubkey || !room) return;
 
+    setIsSubmittingMove(true);
     try {
       const [p0ProfilePda] = getProfilePda(room.players[0]);
       const [p1ProfilePda] = getProfilePda(room.players[1]);
@@ -216,9 +225,12 @@ export default function RoomPage({
         .rpc();
 
       refetch();
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Game action error:', err);
-      toast.error(err.message || 'Move failed');
+      const msg = err instanceof Error ? err.message : 'Move failed';
+      toast.error(msg);
+    } finally {
+      setIsSubmittingMove(false);
     }
   };
 
@@ -253,7 +265,6 @@ export default function RoomPage({
   const tierCoins = STAKE_TIERS_COINS[room.tier] ?? 100;
   const stakeSol = (tierCoins * LAMPORTS_PER_COIN) / 1_000_000_000;
   const totalPotCoins = tierCoins * 2;
-  const totalPotSol = stakeSol * 2;
   const gameName = GAME_NAMES[room.game] || 'Custom Minigame';
 
   const deadlineSecondsRemaining = Math.max(0, room.deadlineTs.toNumber() - nowTs);
@@ -339,7 +350,7 @@ export default function RoomPage({
               Waiting for an opponent to join...
             </div>
             <div className="flex gap-2">
-              <Input readOnly value={typeof window !== 'undefined' ? window.location.href : address} className="font-mono text-xs" />
+              <Input readOnly value={shareUrl || address} className="font-mono text-xs" />
               <Button onClick={handleCopyLink} variant="outline" size="sm" className="flex items-center gap-1.5 shrink-0">
                 {copied ? <Check className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5" />}
                 <span>{copied ? 'Copied' : 'Share Link'}</span>
@@ -414,7 +425,7 @@ export default function RoomPage({
                   state={registered.engine.decodeState(new Uint8Array(room.state))}
                   me={myPlayerIdx as 0 | 1}
                   onMove={(m) => handleGameAction(registered.engine.encodeAction(m))}
-                  disabled={false}
+                  disabled={isSubmittingMove}
                 />
               </div>
             ) : (

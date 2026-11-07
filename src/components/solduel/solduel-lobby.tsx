@@ -294,3 +294,4 @@ export function SolduelLobby() {
     </div>
   );
 }
+
