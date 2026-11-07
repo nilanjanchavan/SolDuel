@@ -9,7 +9,6 @@ pub mod room;
 pub mod state;
 
 use constants::*;
-use errors::SolduelError;
 use state::*;
 
 declare_id!("HtmYkFnCvn8E218UrvSiAgVjpuqBVyE54B71RvCgJM7u");
@@ -18,37 +17,44 @@ declare_id!("HtmYkFnCvn8E218UrvSiAgVjpuqBVyE54B71RvCgJM7u");
 pub mod solduel {
     use super::*;
 
+    /// Creates an open match room with escrowed stake and sets creator's active room.
     pub fn create_room(
-        _ctx: Context<CreateRoom>,
-        _game: u8,
-        _tier: u8,
-        _allowed_opponent: Option<Pubkey>,
+        ctx: Context<CreateRoom>,
+        game: u8,
+        tier: u8,
+        allowed_opponent: Option<Pubkey>,
     ) -> Result<()> {
-        err!(SolduelError::NotImplemented)
+        room::handle_create_room(ctx, game, tier, allowed_opponent)
     }
 
-    pub fn join_room(_ctx: Context<JoinRoom>) -> Result<()> {
-        err!(SolduelError::NotImplemented)
+    /// Joins an open room, escrows the challenger stake, and transitions room to active.
+    pub fn join_room(ctx: Context<JoinRoom>) -> Result<()> {
+        room::handle_join_room(ctx)
     }
 
-    pub fn quick_play(_ctx: Context<QuickPlay>, _game: u8, _tier: u8) -> Result<()> {
-        err!(SolduelError::NotImplemented)
+    /// Matchmakes or queues in a Quick Play waiting spot, reclaiming expired spots if needed.
+    pub fn quick_play(ctx: Context<QuickPlay>, game: u8, tier: u8) -> Result<()> {
+        room::handle_quick_play(ctx, game, tier)
     }
 
-    pub fn cancel_room(_ctx: Context<CancelRoom>) -> Result<()> {
-        err!(SolduelError::NotImplemented)
+    /// Cancels an open room before an opponent joins, refunding stake and rent to creator.
+    pub fn cancel_room(ctx: Context<CancelRoom>) -> Result<()> {
+        room::handle_cancel_room(ctx)
     }
 
-    pub fn game_action(_ctx: Context<GameAction>, _data: Vec<u8>) -> Result<()> {
-        err!(SolduelError::NotImplemented)
+    /// Dispatches a game action and settles a completed game. Production game rules are not implemented yet.
+    pub fn game_action(ctx: Context<GameAction>, data: Vec<u8>) -> Result<()> {
+        room::handle_game_action(ctx, data)
     }
 
-    pub fn claim_timeout(_ctx: Context<ClaimTimeout>) -> Result<()> {
-        err!(SolduelError::NotImplemented)
+    /// Claims timeout settlement after the deadline and grace period. Production game timeouts currently settle as draws.
+    pub fn claim_timeout(ctx: Context<ClaimTimeout>) -> Result<()> {
+        room::handle_claim_timeout(ctx)
     }
 
-    pub fn mint_badge(_ctx: Context<MintBadge>, _badge: u8) -> Result<()> {
-        err!(SolduelError::NotImplemented)
+    /// Mints an unlocked profile achievement badge as a soulbound NFT.
+    pub fn mint_badge(ctx: Context<MintBadge>, badge: u8) -> Result<()> {
+        badges::handle_mint_badge(ctx, badge)
     }
 }
 

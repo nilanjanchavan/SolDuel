@@ -172,15 +172,15 @@
       ],
       "args": [
         {
-          "name": "_game",
+          "name": "game",
           "type": "u8"
         },
         {
-          "name": "_tier",
+          "name": "tier",
           "type": "u8"
         },
         {
-          "name": "_allowed_opponent",
+          "name": "allowed_opponent",
           "type": {
             "option": "pubkey"
           }
@@ -211,7 +211,7 @@
       ],
       "args": [
         {
-          "name": "_data",
+          "name": "data",
           "type": "bytes"
         }
       ]
@@ -318,7 +318,7 @@
       ],
       "args": [
         {
-          "name": "_badge",
+          "name": "badge",
           "type": "u8"
         }
       ]
@@ -380,11 +380,11 @@
       ],
       "args": [
         {
-          "name": "_game",
+          "name": "game",
           "type": "u8"
         },
         {
-          "name": "_tier",
+          "name": "tier",
           "type": "u8"
         }
       ]

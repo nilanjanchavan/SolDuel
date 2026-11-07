@@ -1,7 +1,117 @@
 use anchor_lang::prelude::*;
-use crate::errors::SolduelError;
+use crate::constants::{INITIAL_RATING, MAX_RATING, MIN_RATING};
+use crate::state::Profile;
 
-pub fn update_rating() -> Result<()> {
-    err!(SolduelError::NotImplemented)
+/// Updates Elo ratings, win/loss/draw records, streaks, and active room pointers for both match players.
+pub fn update_ratings_and_stats_raw(
+    prof_0_acc: &AccountInfo,
+    prof_1_acc: &AccountInfo,
+    winner_opt: Option<u8>,
+    is_skill: bool,
+) -> Result<()> {
+    // Both profiles must have at least Profile::LEN bytes
+    if prof_0_acc.data_len() < Profile::LEN || prof_1_acc.data_len() < Profile::LEN {
+        return Err(ProgramError::AccountDataTooSmall.into());
+    }
+
+    let mut data_0 = prof_0_acc.try_borrow_mut_data()?;
+    let mut data_1 = prof_1_acc.try_borrow_mut_data()?;
+
+    let mut profile_0 = Profile {
+        wins: u32::from_le_bytes(data_0[8..12].try_into().unwrap()),
+        losses: u32::from_le_bytes(data_0[12..16].try_into().unwrap()),
+        draws: u32::from_le_bytes(data_0[16..20].try_into().unwrap()),
+        rating: u16::from_le_bytes(data_0[20..22].try_into().unwrap()),
+        streak: u32::from_le_bytes(data_0[22..26].try_into().unwrap()),
+        best_streak: u32::from_le_bytes(data_0[26..30].try_into().unwrap()),
+        badges: u32::from_le_bytes(data_0[30..34].try_into().unwrap()),
+        active_room: Pubkey::new_from_array(data_0[34..66].try_into().unwrap()),
+        bump: data_0[66],
+    };
+
+    let mut profile_1 = Profile {
+        wins: u32::from_le_bytes(data_1[8..12].try_into().unwrap()),
+        losses: u32::from_le_bytes(data_1[12..16].try_into().unwrap()),
+        draws: u32::from_le_bytes(data_1[16..20].try_into().unwrap()),
+        rating: u16::from_le_bytes(data_1[20..22].try_into().unwrap()),
+        streak: u32::from_le_bytes(data_1[22..26].try_into().unwrap()),
+        best_streak: u32::from_le_bytes(data_1[26..30].try_into().unwrap()),
+        badges: u32::from_le_bytes(data_1[30..34].try_into().unwrap()),
+        active_room: Pubkey::new_from_array(data_1[34..66].try_into().unwrap()),
+        bump: data_1[66],
+    };
+
+    profile_0.active_room = Pubkey::default();
+    profile_1.active_room = Pubkey::default();
+
+    if profile_0.rating == 0 {
+        profile_0.rating = INITIAL_RATING;
+    }
+    if profile_1.rating == 0 {
+        profile_1.rating = INITIAL_RATING;
+    }
+
+    match winner_opt {
+        Some(0) => {
+            profile_0.wins = profile_0.wins.saturating_add(1);
+            profile_0.streak = profile_0.streak.saturating_add(1);
+            if profile_0.streak > profile_0.best_streak {
+                profile_0.best_streak = profile_0.streak;
+            }
+
+            profile_1.losses = profile_1.losses.saturating_add(1);
+            profile_1.streak = 0;
+
+            if is_skill {
+                let diff = (profile_1.rating as i32 - profile_0.rating as i32) / 25;
+                let change = (16 + diff).clamp(4, 32) as u16;
+                profile_0.rating = profile_0.rating.saturating_add(change).min(MAX_RATING);
+                profile_1.rating = profile_1.rating.saturating_sub(change).max(MIN_RATING);
+            }
+        }
+        Some(1) => {
+            profile_1.wins = profile_1.wins.saturating_add(1);
+            profile_1.streak = profile_1.streak.saturating_add(1);
+            if profile_1.streak > profile_1.best_streak {
+                profile_1.best_streak = profile_1.streak;
+            }
+
+            profile_0.losses = profile_0.losses.saturating_add(1);
+            profile_0.streak = 0;
+
+            if is_skill {
+                let diff = (profile_0.rating as i32 - profile_1.rating as i32) / 25;
+                let change = (16 + diff).clamp(4, 32) as u16;
+                profile_1.rating = profile_1.rating.saturating_add(change).min(MAX_RATING);
+                profile_0.rating = profile_0.rating.saturating_sub(change).max(MIN_RATING);
+            }
+        }
+        _ => {
+            profile_0.draws = profile_0.draws.saturating_add(1);
+            profile_0.streak = 0;
+            profile_1.draws = profile_1.draws.saturating_add(1);
+            profile_1.streak = 0;
+        }
+    }
+
+    // Write back to account data
+    data_0[8..12].copy_from_slice(&profile_0.wins.to_le_bytes());
+    data_0[12..16].copy_from_slice(&profile_0.losses.to_le_bytes());
+    data_0[16..20].copy_from_slice(&profile_0.draws.to_le_bytes());
+    data_0[20..22].copy_from_slice(&profile_0.rating.to_le_bytes());
+    data_0[22..26].copy_from_slice(&profile_0.streak.to_le_bytes());
+    data_0[26..30].copy_from_slice(&profile_0.best_streak.to_le_bytes());
+    data_0[30..34].copy_from_slice(&profile_0.badges.to_le_bytes());
+    data_0[34..66].copy_from_slice(profile_0.active_room.as_ref());
+
+    data_1[8..12].copy_from_slice(&profile_1.wins.to_le_bytes());
+    data_1[12..16].copy_from_slice(&profile_1.losses.to_le_bytes());
+    data_1[16..20].copy_from_slice(&profile_1.draws.to_le_bytes());
+    data_1[20..22].copy_from_slice(&profile_1.rating.to_le_bytes());
+    data_1[22..26].copy_from_slice(&profile_1.streak.to_le_bytes());
+    data_1[26..30].copy_from_slice(&profile_1.best_streak.to_le_bytes());
+    data_1[30..34].copy_from_slice(&profile_1.badges.to_le_bytes());
+    data_1[34..66].copy_from_slice(profile_1.active_room.as_ref());
+
+    Ok(())
 }
-

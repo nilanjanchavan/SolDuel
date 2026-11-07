@@ -8,6 +8,9 @@ import { ThemeSelect } from '@/components/theme-select'
 import { ClusterUiSelect } from './cluster/cluster-ui'
 import { WalletButton } from '@/components/solana/solana-provider'
 
+/**
+ * Main application navigation header with wallet connection, network selector, and theme toggle.
+ */
 export function AppHeader({ links = [] }: { links: { label: string; path: string }[] }) {
   const pathname = usePathname()
   const [showMenu, setShowMenu] = useState(false)
@@ -20,8 +23,8 @@ export function AppHeader({ links = [] }: { links: { label: string; path: string
     <header className="relative z-50 px-4 py-2 bg-neutral-100 dark:bg-neutral-900 dark:text-neutral-400">
       <div className="mx-auto flex justify-between items-center">
         <div className="flex items-baseline gap-4">
-          <Link className="text-xl hover:text-neutral-500 dark:hover:text-white" href="/">
-            <span>TmpScaffoldTest</span>
+          <Link className="text-xl font-bold tracking-tight hover:text-neutral-500 dark:hover:text-white flex items-center gap-1.5" href="/">
+            <span className="text-purple-600 dark:text-purple-400">Sol</span><span>Duel</span>
           </Link>
           <div className="hidden md:flex items-center">
             <ul className="flex gap-4 flex-nowrap items-center">
