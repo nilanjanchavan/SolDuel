@@ -11,6 +11,7 @@ import {
   useSolduelProgram,
   useRoomAccount,
   getProfilePda,
+  getWaitingSpotPda,
 } from '@/components/solduel/solduel-data-access';
 import { GetTestSolButton } from '@/components/solduel/get-test-sol-button';
 import { STAKE_TIERS_COINS, LAMPORTS_PER_COIN, TIMEOUT_GRACE_SECS } from '@/config';
@@ -104,12 +105,16 @@ export default function RoomPage({
     return -1;
   }, [wallet.publicKey, room]);
 
-  const handleCopyLink = () => {
+  const handleCopyLink = async () => {
     if (typeof window === 'undefined') return;
-    navigator.clipboard.writeText(window.location.href);
-    setCopied(true);
-    toast.success('Room link copied to clipboard!');
-    setTimeout(() => setCopied(false), 2000);
+    try {
+      await navigator.clipboard.writeText(window.location.href);
+      setCopied(true);
+      toast.success('Room link copied to clipboard!');
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      toast.error('Failed to copy room link');
+    }
   };
 
   const handleJoin = async () => {
@@ -120,13 +125,11 @@ export default function RoomPage({
 
     setIsJoining(true);
     try {
-      const [myProfilePda] = getProfilePda(wallet.publicKey);
       toast.info('Joining match...');
       await (program.methods as any)
         .joinRoom()
         .accounts({
           room: roomPubkey,
-          profile: myProfilePda,
           player: wallet.publicKey,
         })
         .rpc();
@@ -147,15 +150,25 @@ export default function RoomPage({
 
     setIsCancelling(true);
     try {
-      const [myProfilePda] = getProfilePda(wallet.publicKey);
       toast.info('Cancelling room and refunding stake...');
+      
+      const remainingAccounts = [];
+      if (room?.isQuickPlay) {
+        const [spotPda] = getWaitingSpotPda(room.game, room.tier);
+        remainingAccounts.push({
+          pubkey: spotPda,
+          isSigner: false,
+          isWritable: true,
+        });
+      }
+
       await (program.methods as any)
         .cancelRoom()
         .accounts({
           room: roomPubkey,
-          profile: myProfilePda,
           creator: wallet.publicKey,
         })
+        .remainingAccounts(remainingAccounts)
         .rpc();
 
       toast.success('Room cancelled! Stakes and rent refunded.');
@@ -235,7 +248,19 @@ export default function RoomPage({
     }
   };
 
-  if (isLoading) {
+  // Retain the settled room data so that when the room closes on-chain,
+  // players can still view the concluded match, winner, and payout/refund summary.
+  const [settledRoom, setSettledRoom] = useState<any>(null);
+
+  useEffect(() => {
+    if (room) {
+      setSettledRoom(room);
+    }
+  }, [room]);
+
+  const currentRoom = room || settledRoom;
+
+  if (isLoading && !currentRoom) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[50vh] space-y-4">
         <Swords className="h-10 w-10 animate-bounce text-purple-600 dark:text-purple-400" />
@@ -244,7 +269,7 @@ export default function RoomPage({
     );
   }
 
-  if (!room) {
+  if (!currentRoom) {
     return (
       <div className="max-w-xl mx-auto py-12 text-center space-y-4">
         <AlertTriangle className="h-12 w-12 text-amber-500 mx-auto" />
@@ -262,20 +287,22 @@ export default function RoomPage({
   }
 
   // Parse room status
-  const statusKey = Object.keys(room.status)[0]?.toLowerCase() || 'open';
-  const tierCoins = STAKE_TIERS_COINS[room.tier] ?? 100;
+  const rawStatus = Object.keys(currentRoom.status)[0]?.toLowerCase() || 'open';
+  const statusKey = (!room && settledRoom && rawStatus === 'active') ? 'finished' : rawStatus;
+  const tierCoins = STAKE_TIERS_COINS[currentRoom.tier] ?? 100;
   const stakeSol = (tierCoins * LAMPORTS_PER_COIN) / 1_000_000_000;
   const totalPotCoins = tierCoins * 2;
-  const gameName = GAME_NAMES[room.game] || 'Custom Minigame';
+  const gameName = GAME_NAMES[currentRoom.game] || 'Custom Minigame';
 
-  const deadlineSecondsRemaining = Math.max(0, room.deadlineTs.toNumber() - nowTs);
+  const deadlineVal = currentRoom.deadlineTs?.toNumber ? currentRoom.deadlineTs.toNumber() : Number(currentRoom.deadlineTs || 0);
+  const deadlineSecondsRemaining = Math.max(0, deadlineVal - nowTs);
   const timeoutClaimable =
     statusKey === 'active' &&
-    room.deadlineTs.toNumber() > 0 &&
-    nowTs >= room.deadlineTs.toNumber() + TIMEOUT_GRACE_SECS;
+    deadlineVal > 0 &&
+    nowTs >= deadlineVal + TIMEOUT_GRACE_SECS;
 
   // Registered game engine/ui
-  const registered = getGame(room.game as any);
+  const registered = getGame(currentRoom.game as any);
 
   return (
     <div className="max-w-3xl mx-auto space-y-6 py-4">
@@ -358,8 +385,20 @@ export default function RoomPage({
               </Button>
             </div>
 
-            {/* If spectator / challenger: Join button */}
-            {!isCreator && (
+            {/* If spectator / challenger: Join button for custom rooms, Quick Play guidance for quick play */}
+            {!isCreator && currentRoom.isQuickPlay && (
+              <div className="space-y-2 text-center py-2">
+                <p className="text-xs text-neutral-500">
+                  This room was created through Quick Play. Use Quick Play in the lobby with this game and tier to match with an available player.
+                </p>
+                <Button asChild className="w-full bg-purple-600 hover:bg-purple-700 text-white font-semibold py-5">
+                  <Link href={`/?tab=quick&game=${currentRoom.game}&tier=${currentRoom.tier}`}>
+                    Find Match via Quick Play
+                  </Link>
+                </Button>
+              </div>
+            )}
+            {!isCreator && !currentRoom.isQuickPlay && (
               <Button
                 className="w-full bg-purple-600 hover:bg-purple-700 text-white font-semibold py-5"
                 disabled={isJoining}

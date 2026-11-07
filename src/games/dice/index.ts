@@ -33,42 +33,7 @@ export const diceEngine: GameEngine<DiceState, DiceMove> = {
 
 export const diceUI: GameUI<DiceState, DiceMove> = {
   Board({ state, me, onMove, disabled }) {
-    return React.createElement(
-      'div',
-      { className: 'space-y-4 text-center' },
-      React.createElement(
-        'div',
-        { className: 'flex items-center justify-between text-xs text-neutral-500 font-mono' },
-        React.createElement('span', null, `You: Player ${me + 1}`),
-        React.createElement('span', null, `Last Rolls: [${state.rolls[0]}, ${state.rolls[1]}]`)
-      ),
-      React.createElement(
-        'p',
-        { className: 'text-xs text-neutral-500 font-mono' },
-        disabled ? 'Board inactive' : 'Roll the dice to commit your seed:'
-      ),
-      React.createElement(
-        'div',
-        { className: 'flex justify-center' },
-        React.createElement(
-          'button',
-          {
-            type: 'button',
-            disabled,
-            onClick: () => {
-              const secret = new Uint8Array(32);
-              if (typeof window !== 'undefined' && window.crypto) {
-                window.crypto.getRandomValues(secret);
-              }
-              onMove({ secret });
-            },
-            className:
-              'px-6 py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-sm font-semibold disabled:opacity-50 transition',
-          },
-          '🎲 Roll Dice'
-        )
-      )
-    );
+    return React.createElement('div', { className: 'dice-board' }, 'Dice Duel Board Stub');
   },
 };
 

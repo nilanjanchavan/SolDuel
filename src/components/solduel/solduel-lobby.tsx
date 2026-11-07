@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useMemo } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { PublicKey, SystemProgram } from '@solana/web3.js';
 import { Button } from '@/components/ui/button';
@@ -32,13 +32,42 @@ const GAMES = [
 
 export function SolduelLobby() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { program, wallet } = useSolduelProgram();
-  const [selectedGame, setSelectedGame] = useState<number>(0);
-  const [selectedTier, setSelectedTier] = useState<number>(0);
+
+  const initialGame = useMemo(() => {
+    const p = searchParams.get('game');
+    if (p !== null) {
+      const val = parseInt(p, 10);
+      if (!isNaN(val) && val >= 0 && val <= 3) {
+        return val;
+      }
+    }
+    return 0;
+  }, [searchParams]);
+
+  const initialTier = useMemo(() => {
+    const p = searchParams.get('tier');
+    if (p !== null) {
+      const val = parseInt(p, 10);
+      if (!isNaN(val) && val >= 0 && val <= 2) {
+        return val;
+      }
+    }
+    return 0;
+  }, [searchParams]);
+
+  const initialTab = useMemo(() => {
+    const p = searchParams.get('tab');
+    return p === 'custom' ? 'custom' : 'quick';
+  }, [searchParams]);
+
+  const [selectedGame, setSelectedGame] = useState<number>(initialGame);
+  const [selectedTier, setSelectedTier] = useState<number>(initialTier);
   const [allowedOpponent, setAllowedOpponent] = useState<string>('');
   const [isCreating, setIsCreating] = useState(false);
   const [isQuickPlaying, setIsQuickPlaying] = useState(false);
-  const [activeTab, setActiveTab] = useState<'quick' | 'custom'>('quick');
+  const [activeTab, setActiveTab] = useState<'quick' | 'custom'>(initialTab);
 
   const handleQuickPlay = async () => {
     if (!wallet.publicKey) {
@@ -61,8 +90,25 @@ export function SolduelLobby() {
         if (spotAccountInfo && spotAccountInfo.data.length >= 48) {
           const roomInSpot = new PublicKey(spotAccountInfo.data.slice(8, 40));
           if (!roomInSpot.equals(PublicKey.default)) {
+            // First check if the user is already the waiting creator in this spot
+            if (roomInSpot.equals(myRoomPda)) {
+              toast.info('You already have an open waiting room in this Quick Play queue.');
+              router.push(`/room/${myRoomPda.toBase58()}`);
+              return;
+            }
+
             const createdTs = Number(spotAccountInfo.data.readBigInt64LE(40));
-            const now = Math.floor(Date.now() / 1000);
+            let now = Math.floor(Date.now() / 1000);
+            try {
+              const slot = await program.provider.connection.getSlot('confirmed');
+              const blockTime = await program.provider.connection.getBlockTime(slot);
+              if (blockTime !== null) {
+                now = blockTime;
+              }
+            } catch (timeErr) {
+              console.warn('Could not fetch cluster block time, using local clock:', timeErr);
+            }
+
             const isExpired = now - createdTs > QUICK_PLAY_EXPIRY_SECS;
 
             if (isExpired) {
@@ -94,10 +140,6 @@ export function SolduelLobby() {
               } catch (fetchErr) {
                 console.warn('Could not fetch old room for creator cleanup:', fetchErr);
               }
-            } else if (roomInSpot.equals(myRoomPda)) {
-              toast.info('You already have an open waiting room in this Quick Play queue.');
-              router.push(`/room/${myRoomPda.toBase58()}`);
-              return;
             } else {
               // Valid unexpired room queued by an opponent: join it
               targetRoom = roomInSpot;
