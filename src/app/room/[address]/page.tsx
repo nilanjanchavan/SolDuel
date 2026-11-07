@@ -53,6 +53,15 @@ export default function RoomPage({
   const { program, wallet, connection } = useSolduelProgram();
   const { room, isLoading, refetch, roomPubkey } = useRoomAccount(address);
 
+  type RoomAccount = NonNullable<ReturnType<typeof useRoomAccount>['room']>;
+  const [retainedRoom, setRetainedRoom] = useState<RoomAccount | null>(null);
+
+  if (room && room !== retainedRoom) {
+    setRetainedRoom(room);
+  }
+
+  const currentRoom = room ?? retainedRoom;
+
   const shareUrl = useSyncExternalStore(
     emptySubscribe,
     () => window.location.href,
@@ -90,24 +99,24 @@ export default function RoomPage({
   }, [roomPubkey, connection, refetch]);
 
   const isCreator = useMemo(() => {
-    if (!wallet.publicKey || !room) return false;
-    return room.creator.equals(wallet.publicKey);
-  }, [wallet.publicKey, room]);
+    if (!wallet.publicKey || !currentRoom) return false;
+    return currentRoom.creator.equals(wallet.publicKey);
+  }, [wallet.publicKey, currentRoom]);
 
   const isPlayer = useMemo(() => {
-    if (!wallet.publicKey || !room) return false;
+    if (!wallet.publicKey || !currentRoom) return false;
     return (
-      room.players[0].equals(wallet.publicKey) ||
-      room.players[1].equals(wallet.publicKey)
+      currentRoom.players[0].equals(wallet.publicKey) ||
+      currentRoom.players[1].equals(wallet.publicKey)
     );
-  }, [wallet.publicKey, room]);
+  }, [wallet.publicKey, currentRoom]);
 
   const myPlayerIdx = useMemo(() => {
-    if (!wallet.publicKey || !room) return -1;
-    if (room.players[0].equals(wallet.publicKey)) return 0;
-    if (room.players[1].equals(wallet.publicKey)) return 1;
+    if (!wallet.publicKey || !currentRoom) return -1;
+    if (currentRoom.players[0].equals(wallet.publicKey)) return 0;
+    if (currentRoom.players[1].equals(wallet.publicKey)) return 1;
     return -1;
-  }, [wallet.publicKey, room]);
+  }, [wallet.publicKey, currentRoom]);
 
   const handleCopyLink = async () => {
     if (typeof window === 'undefined') return;
@@ -157,8 +166,8 @@ export default function RoomPage({
       toast.info('Cancelling room and refunding stake...');
       
       const remainingAccounts = [];
-      if (room?.isQuickPlay) {
-        const [spotPda] = getWaitingSpotPda(room.game, room.tier);
+      if (currentRoom?.isQuickPlay) {
+        const [spotPda] = getWaitingSpotPda(currentRoom.game, currentRoom.tier);
         remainingAccounts.push({
           pubkey: spotPda,
           isSigner: false,
@@ -186,12 +195,12 @@ export default function RoomPage({
   };
 
   const handleClaimTimeout = async () => {
-    if (!wallet.publicKey || !roomPubkey || !room) return;
+    if (!wallet.publicKey || !roomPubkey || !currentRoom) return;
 
     setIsClaimingTimeout(true);
     try {
-      const [p0ProfilePda] = getProfilePda(room.players[0]);
-      const [p1ProfilePda] = getProfilePda(room.players[1]);
+      const [p0ProfilePda] = getProfilePda(currentRoom.players[0]);
+      const [p1ProfilePda] = getProfilePda(currentRoom.players[1]);
 
       toast.info('Claiming timeout victory...');
       await program.methods
@@ -201,8 +210,8 @@ export default function RoomPage({
           claimant: wallet.publicKey,
         })
         .remainingAccounts([
-          { pubkey: room.players[0], isSigner: false, isWritable: true },
-          { pubkey: room.players[1], isSigner: false, isWritable: true },
+          { pubkey: currentRoom.players[0], isSigner: false, isWritable: true },
+          { pubkey: currentRoom.players[1], isSigner: false, isWritable: true },
           { pubkey: p0ProfilePda, isSigner: false, isWritable: true },
           { pubkey: p1ProfilePda, isSigner: false, isWritable: true },
         ])
@@ -220,12 +229,12 @@ export default function RoomPage({
   };
 
   const handleGameAction = async (data: Uint8Array) => {
-    if (!wallet.publicKey || !roomPubkey || !room) return;
+    if (!wallet.publicKey || !roomPubkey || !currentRoom) return;
 
     setIsSubmittingMove(true);
     try {
-      const [p0ProfilePda] = getProfilePda(room.players[0]);
-      const [p1ProfilePda] = getProfilePda(room.players[1]);
+      const [p0ProfilePda] = getProfilePda(currentRoom.players[0]);
+      const [p1ProfilePda] = getProfilePda(currentRoom.players[1]);
 
       await program.methods
         .gameAction(Buffer.from(data))
@@ -234,8 +243,8 @@ export default function RoomPage({
           player: wallet.publicKey,
         })
         .remainingAccounts([
-          { pubkey: room.players[0], isSigner: false, isWritable: true },
-          { pubkey: room.players[1], isSigner: false, isWritable: true },
+          { pubkey: currentRoom.players[0], isSigner: false, isWritable: true },
+          { pubkey: currentRoom.players[1], isSigner: false, isWritable: true },
           { pubkey: p0ProfilePda, isSigner: false, isWritable: true },
           { pubkey: p1ProfilePda, isSigner: false, isWritable: true },
         ])
@@ -251,18 +260,6 @@ export default function RoomPage({
     }
   };
 
-  // Retain the settled room data so that when the room closes on-chain,
-  // players can still view the concluded match, winner, and payout/refund summary.
-  const [settledRoom, setSettledRoom] = useState<any>(null);
-
-  useEffect(() => {
-    if (room) {
-      setSettledRoom(room);
-    }
-  }, [room]);
-
-  const currentRoom = room || settledRoom;
-
   if (isLoading && !currentRoom) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[50vh] space-y-4">
@@ -272,7 +269,14 @@ export default function RoomPage({
     );
   }
 
-  if (!currentRoom) {
+  // Parse room status
+  const statusKey = currentRoom
+    ? Object.keys(currentRoom.status)[0]?.toLowerCase() || 'open'
+    : 'open';
+
+  // If the room account is missing or closed without an authoritative terminal state,
+  // display the not-found / closed screen.
+  if (!currentRoom || (!room && statusKey !== 'finished' && statusKey !== 'cancelled')) {
     return (
       <div className="max-w-xl mx-auto py-12 text-center space-y-4">
         <AlertTriangle className="h-12 w-12 text-amber-500 mx-auto" />
@@ -289,15 +293,12 @@ export default function RoomPage({
     );
   }
 
-  // Parse room status
-  const rawStatus = Object.keys(currentRoom.status)[0]?.toLowerCase() || 'open';
-  const statusKey = (!room && settledRoom && rawStatus === 'active') ? 'finished' : rawStatus;
   const tierCoins = STAKE_TIERS_COINS[currentRoom.tier] ?? 100;
   const stakeSol = (tierCoins * LAMPORTS_PER_COIN) / 1_000_000_000;
   const totalPotCoins = tierCoins * 2;
   const gameName = GAME_NAMES[currentRoom.game] || 'Custom Minigame';
 
-  const deadlineVal = currentRoom.deadlineTs?.toNumber ? currentRoom.deadlineTs.toNumber() : Number(currentRoom.deadlineTs || 0);
+  const deadlineVal = Number(currentRoom.deadlineTs || 0);
   const deadlineSecondsRemaining = Math.max(0, deadlineVal - nowTs);
   const timeoutClaimable =
     statusKey === 'active' &&
