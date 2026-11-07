@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { ConnectFourState, ConnectFourMove } from './types';
 import { COLS, ROWS, getLowestEmptyRow } from './bot';
 
@@ -30,6 +30,16 @@ export function ConnectFourBoard({ state, me, onMove, disabled }: BoardProps) {
     if (player === 1) return 'bg-amber-400 shadow-md ring-2 ring-amber-300/50';
     return 'bg-neutral-200 dark:bg-neutral-800';
   };
+
+  const lastMoveText = useMemo(() => {
+    if (!state.lastMove) return 'No moves played yet.';
+    const cellValue = state.board[state.lastMove.col]?.[state.lastMove.row];
+    const playerLabel =
+      cellValue === 0 ? 'Player 1' : cellValue === 1 ? 'Player 2' : 'Unknown';
+    return `Last move played by ${playerLabel} at Column ${state.lastMove.col + 1}, Row ${
+      state.lastMove.row + 1
+    }.`;
+  }, [state.lastMove, state.board]);
 
   return (
     <div className="flex flex-col items-center select-none space-y-4">
@@ -83,13 +93,7 @@ export function ConnectFourBoard({ state, me, onMove, disabled }: BoardProps) {
         {/* Accessible screen reader description of the current board state */}
         <div className="sr-only" aria-live="polite">
           <h3>Connect Four Board State</h3>
-          <p>
-            {state.lastMove
-              ? `Last move played by Player ${state.turn === 0 ? 2 : 1} at Column ${
-                  state.lastMove.col + 1
-                }, Row ${state.lastMove.row + 1}.`
-              : 'No moves played yet.'}
-          </p>
+          <p>{lastMoveText}</p>
           <table aria-label="Connect Four board state">
             <caption>Connect Four grid: 7 columns by 6 rows</caption>
             <tbody>
