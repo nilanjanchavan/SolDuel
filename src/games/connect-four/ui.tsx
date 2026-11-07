@@ -80,6 +80,44 @@ export function ConnectFourBoard({ state, me, onMove, disabled }: BoardProps) {
 
       {/* Grid Board */}
       <div className="bg-blue-600 dark:bg-blue-700 p-3 sm:p-4 rounded-2xl shadow-xl border-4 border-blue-700 dark:border-blue-800 max-w-sm w-full">
+        {/* Accessible screen reader description of the current board state */}
+        <div className="sr-only" aria-live="polite">
+          <h3>Connect Four Board State</h3>
+          <p>
+            {state.lastMove
+              ? `Last move played by Player ${state.turn === 0 ? 2 : 1} at Column ${
+                  state.lastMove.col + 1
+                }, Row ${state.lastMove.row + 1}.`
+              : 'No moves played yet.'}
+          </p>
+          <table aria-label="Connect Four board state">
+            <caption>Connect Four grid: 7 columns by 6 rows</caption>
+            <tbody>
+              {Array.from({ length: ROWS }).map((_, rIdx) => {
+                const row = ROWS - 1 - rIdx;
+                return (
+                  <tr key={row}>
+                    {Array.from({ length: COLS }).map((_, col) => {
+                      const cell = state.board[col][row];
+                      const desc =
+                        cell === null
+                          ? 'empty'
+                          : cell === 0
+                          ? 'Player 1'
+                          : 'Player 2';
+                      return (
+                        <td key={col}>
+                          {`Row ${row + 1}, Column ${col + 1}: ${desc}`}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+
         <div className="grid grid-cols-7 gap-2 sm:gap-3">
           {Array.from({ length: COLS }).map((_, col) => {
             const isColFull = getLowestEmptyRow(state.board, col) === -1;
@@ -89,7 +127,7 @@ export function ConnectFourBoard({ state, me, onMove, disabled }: BoardProps) {
               <button
                 type="button"
                 key={col}
-                aria-label={`Column ${col + 1}`}
+                aria-label={`Column ${col + 1}${isColFull ? ' (Full)' : ''}`}
                 disabled={!canClick}
                 onClick={() => canClick && handleColumnClick(col)}
                 onMouseEnter={() => setHoverCol(col)}
@@ -106,12 +144,16 @@ export function ConnectFourBoard({ state, me, onMove, disabled }: BoardProps) {
                   const cell = state.board[col][row];
                   const isLastMove =
                     state.lastMove?.col === col && state.lastMove?.row === row;
+                  const cellText = `Row ${row + 1}, Column ${col + 1}: ${
+                    cell === null ? 'Empty' : cell === 0 ? 'Player 1' : 'Player 2'
+                  }${isLastMove ? ' (Last Move)' : ''}`;
 
                   return (
                     <div
                       key={row}
                       className="aspect-square relative rounded-full flex items-center justify-center p-0.5"
                     >
+                      <span className="sr-only">{cellText}</span>
                       <div
                         className={`w-full h-full rounded-full transition-transform duration-200 ${getDiscColor(
                           cell
