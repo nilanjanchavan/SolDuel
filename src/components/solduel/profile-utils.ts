@@ -124,6 +124,11 @@ export interface ProfileAccountData {
  * @returns Deserialized ProfileAccountData
  */
 export function decodeProfileBuffer(data: Uint8Array): ProfileAccountData {
+  if (!data || data.length < 67) {
+    throw new Error(
+      `Profile buffer too short: expected at least 67 bytes, got ${data?.length || 0}`
+    );
+  }
   const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
   return {
     wins: view.getUint32(8, true),

@@ -1,12 +1,12 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { useLeaderboard, LeaderboardEntry } from '@/components/solduel/solduel-data-access';
+import { useLeaderboard, getProfilePda, LeaderboardEntry } from '@/components/solduel/solduel-data-access';
 import {
   Trophy,
   Flame,
@@ -25,8 +25,13 @@ import {
  */
 export default function LeaderboardPage() {
   const { publicKey } = useWallet();
-  const { data: leaderboard, isLoading, refetch } = useLeaderboard();
+  const { data: leaderboard, isLoading, isError, error, refetch } = useLeaderboard();
   const [sortKey, setSortKey] = useState<'rating' | 'wins' | 'streak'>('rating');
+
+  const myProfilePdaStr = useMemo(() => {
+    if (!publicKey) return null;
+    return getProfilePda(publicKey)[0].toBase58();
+  }, [publicKey]);
 
   const myWalletStr = publicKey ? publicKey.toBase58() : null;
 
@@ -67,6 +72,17 @@ export default function LeaderboardPage() {
           )}
         </div>
       </div>
+
+      {isError && (
+        <Card className="p-6 text-center border-dashed border-red-300 dark:border-red-900/50 space-y-2">
+          <p className="text-sm text-destructive font-medium">
+            Failed to load leaderboard data: {error instanceof Error ? error.message : 'Network error'}
+          </p>
+          <Button onClick={() => refetch()} variant="outline" size="sm">
+            Retry
+          </Button>
+        </Card>
+      )}
 
       {/* Podium for Top 3 */}
       {top3.length >= 3 && (
@@ -219,7 +235,8 @@ export default function LeaderboardPage() {
               ) : (
                 sortedList.map((entry, idx) => {
                   const rank = idx + 1;
-                  const isUser = myWalletStr === entry.wallet || myWalletStr === entry.profilePda;
+                  const isUser = myProfilePdaStr !== null && myProfilePdaStr === entry.profilePda;
+                  const canDuel = !isUser && entry.wallet !== entry.profilePda;
 
                 return (
                   <tr
@@ -293,7 +310,7 @@ export default function LeaderboardPage() {
                         <Button variant="ghost" size="sm" asChild className="h-7 text-xs">
                           <Link href={`/profile/${entry.wallet}`}>Profile</Link>
                         </Button>
-                        {!isUser && (
+                        {canDuel && (
                           <Button size="sm" asChild className="h-7 text-xs bg-purple-600 hover:bg-purple-700">
                             <Link href={`/?opponent=${entry.wallet}`}>Duel</Link>
                           </Button>

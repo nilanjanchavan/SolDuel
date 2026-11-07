@@ -85,7 +85,7 @@ pub fn handle_mint_badge<'info>(
         }])
         .invoke()?;
 
-    #[cfg(not(target_os = "solana"))]
+    #[cfg(all(not(target_os = "solana"), any(test, feature = "test-game")))]
     {
         let _ = (
             &player_info,
@@ -95,6 +95,11 @@ pub fn handle_mint_badge<'info>(
             asset_info,
             mpl_core_program,
         );
+    }
+
+    #[cfg(all(not(target_os = "solana"), not(any(test, feature = "test-game"))))]
+    {
+        return err!(SolduelError::InvalidBadge);
     }
 
     // Only update profile after CPI successfully completes

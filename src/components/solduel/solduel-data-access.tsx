@@ -174,8 +174,7 @@ export function useRoomAccount(address: string) {
         const errStr = String(err);
         if (
           errStr.includes('Account does not exist') ||
-          errStr.includes('could not find account') ||
-          errStr.includes('null')
+          errStr.includes('could not find account')
         ) {
           return null;
         }
@@ -216,35 +215,25 @@ export function useProfileAccount(address: string) {
     }
   }, [address]);
 
-  const [profilePda, setProfilePda] = useState<PublicKey | null>(null);
-
-  useEffect(() => {
-    if (!parsedPubkey) {
-      setProfilePda(null);
-      return;
-    }
-    let cancelled = false;
-    connection.getAccountInfo(parsedPubkey).then((info) => {
-      if (cancelled) return;
-      if (info && info.owner.equals(PROGRAM_ID) && info.data.length >= 67) {
-        // Provided address is already a valid profile PDA
-        setProfilePda(parsedPubkey);
-      } else {
-        // Derive profile PDA assuming input is a player wallet
-        const [derived] = getProfilePda(parsedPubkey);
-        setProfilePda(derived);
+  const pdaQuery = useQuery({
+    queryKey: ['profile-pda-lookup', parsedPubkey?.toBase58()],
+    queryFn: async (): Promise<PublicKey | null> => {
+      if (!parsedPubkey) return null;
+      try {
+        const info = await connection.getAccountInfo(parsedPubkey);
+        if (info && info.owner.equals(PROGRAM_ID) && info.data.length >= 67) {
+          return parsedPubkey;
+        }
+      } catch {
+        // Fallback to derived PDA on RPC error
       }
-    }).catch(() => {
-      if (!cancelled) {
-        const [derived] = getProfilePda(parsedPubkey);
-        setProfilePda(derived);
-      }
-    });
+      return getProfilePda(parsedPubkey)[0];
+    },
+    enabled: !!parsedPubkey,
+    staleTime: 60000,
+  });
 
-    return () => {
-      cancelled = true;
-    };
-  }, [parsedPubkey, connection]);
+  const profilePda = pdaQuery.data ?? (parsedPubkey ? getProfilePda(parsedPubkey)[0] : null);
 
   const query = useQuery({
     queryKey: ['profile', address, profilePda?.toBase58()],
@@ -278,7 +267,7 @@ export function useProfileAccount(address: string) {
 
   return {
     profile: query.data,
-    isLoading: query.isLoading,
+    isLoading: pdaQuery.isLoading || query.isLoading,
     refetch: query.refetch,
     profilePda,
     walletPubkey: parsedPubkey,
@@ -401,6 +390,7 @@ export function useLeaderboard() {
         }
       } catch (err) {
         console.warn('Leaderboard program accounts fetch error:', err);
+        throw err;
       }
 
       // Sort by rating descending

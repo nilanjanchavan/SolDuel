@@ -1,6 +1,6 @@
 'use client';
 
-import { use, useEffect, useState, useMemo } from 'react';
+import { use, useEffect, useState, useMemo, useSyncExternalStore } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { PublicKey } from '@solana/web3.js';
@@ -37,6 +37,8 @@ const GAME_NAMES: Record<number, string> = {
   3: 'Dice Duel',
 };
 
+const emptySubscribe = () => () => {};
+
 /**
  * Match Room page subscribing to real-time on-chain game state, turns, and timeouts.
  */
@@ -50,6 +52,12 @@ export default function RoomPage({
   const router = useRouter();
   const { program, wallet, connection } = useSolduelProgram();
   const { room, isLoading, refetch, roomPubkey } = useRoomAccount(address);
+
+  const shareUrl = useSyncExternalStore(
+    emptySubscribe,
+    () => window.location.href,
+    () => address
+  );
 
   const [copied, setCopied] = useState(false);
   const [isJoining, setIsJoining] = useState(false);
@@ -363,7 +371,7 @@ export default function RoomPage({
             <div className="flex gap-2">
               <Input
                 readOnly
-                value={typeof window !== 'undefined' ? window.location.href : address}
+                value={shareUrl}
                 className="font-mono text-xs"
               />
               <Button onClick={handleCopyLink} variant="outline" size="sm" className="flex items-center gap-1.5 shrink-0">
