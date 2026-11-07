@@ -10,9 +10,9 @@ import { Badge } from '@/components/ui/badge';
 import {
   useProfileAccount,
   useMintBadge,
+  getProfilePda,
   BADGE_DEFINITIONS,
   BadgeInfo,
-  BADGE_MINTED_MASK_SHIFT,
 } from '@/components/solduel/solduel-data-access';
 import {
   Trophy,
@@ -27,9 +27,13 @@ import {
   Lock,
   Loader2,
   Medal,
+  AlertCircle,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
+/**
+ * Maps player Elo rating to visual skill rank tier information.
+ */
 function getRatingTier(rating: number): { title: string; color: string } {
   if (rating >= 1200) return { title: 'Grandmaster', color: 'text-purple-400 border-purple-500/50 bg-purple-500/10' };
   if (rating >= 1100) return { title: 'Master', color: 'text-blue-400 border-blue-500/50 bg-blue-500/10' };
@@ -38,6 +42,9 @@ function getRatingTier(rating: number): { title: string; color: string } {
   return { title: 'Novice', color: 'text-neutral-400 border-neutral-500/50 bg-neutral-500/10' };
 }
 
+/**
+ * Player Profile page showing match record, streaks, badges, and on-chain NFT badge minting.
+ */
 export default function ProfilePage({ params }: { params: Promise<{ wallet: string }> }) {
   const resolvedParams = use(params);
   const targetWallet = resolvedParams.wallet;
@@ -45,16 +52,23 @@ export default function ProfilePage({ params }: { params: Promise<{ wallet: stri
   const [copied, setCopied] = useState(false);
   const [mintingIndex, setMintingIndex] = useState<number | null>(null);
 
-  const isMe = publicKey ? publicKey.toBase58() === targetWallet : false;
-
-  const { profile, isLoading, refetch } = useProfileAccount(targetWallet);
+  const { profile, isLoading, refetch, walletPubkey } = useProfileAccount(targetWallet);
   const mintBadgeMutation = useMintBadge();
 
-  const handleCopy = () => {
-    navigator.clipboard.writeText(targetWallet);
-    setCopied(true);
-    toast.success('Wallet address copied');
-    setTimeout(() => setCopied(false), 2000);
+  const myProfilePda = publicKey ? getProfilePda(publicKey)[0].toBase58() : null;
+  const isMe =
+    publicKey !== null &&
+    (publicKey.toBase58() === targetWallet || myProfilePda === targetWallet);
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(targetWallet);
+      setCopied(true);
+      toast.success('Wallet address copied');
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      toast.error('Failed to copy address');
+    }
   };
 
   const handleMint = async (badge: BadgeInfo) => {
@@ -73,6 +87,21 @@ export default function ProfilePage({ params }: { params: Promise<{ wallet: stri
       setMintingIndex(null);
     }
   };
+
+  if (!walletPubkey) {
+    return (
+      <div className="max-w-xl mx-auto py-12 text-center space-y-4">
+        <AlertCircle className="w-12 h-12 text-destructive mx-auto" />
+        <h1 className="text-xl font-bold">Invalid Wallet Address</h1>
+        <p className="text-sm text-neutral-500">
+          The address &quot;{targetWallet}&quot; is not a valid Solana public key.
+        </p>
+        <Button asChild size="sm">
+          <Link href="/">Back to Lobby</Link>
+        </Button>
+      </div>
+    );
+  }
 
   const rating = profile?.rating || 1000;
   const wins = profile?.wins || 0;
@@ -120,9 +149,11 @@ export default function ProfilePage({ params }: { params: Promise<{ wallet: stri
                       You
                     </Badge>
                   )}
-                  <Badge variant="outline" className={tierInfo.color}>
-                    {tierInfo.title}
-                  </Badge>
+                  {profile && (
+                    <Badge variant="outline" className={tierInfo.color}>
+                      {tierInfo.title}
+                    </Badge>
+                  )}
                 </div>
                 <div className="flex items-center gap-3 text-xs text-neutral-500 font-mono">
                   <span>{targetWallet}</span>
@@ -162,6 +193,26 @@ export default function ProfilePage({ params }: { params: Promise<{ wallet: stri
         </CardContent>
       </Card>
 
+      {/* No Profile Alert */}
+      {!isLoading && !profile && (
+        <Card className="p-8 text-center border-dashed border-neutral-300 dark:border-neutral-800 space-y-3">
+          <Shield className="w-10 h-10 text-neutral-400 mx-auto" />
+          <h2 className="text-lg font-bold">No Duels Recorded Yet</h2>
+          <p className="text-sm text-neutral-500 max-w-md mx-auto">
+            {isMe
+              ? 'You have not joined or hosted any minigame duels yet. Enter a quick match or create a room to start earning Elo and badges!'
+              : 'This player has not participated in any SolDuel matches on Devnet yet.'}
+          </p>
+          <div className="pt-2">
+            <Button asChild size="sm" className="bg-purple-600 hover:bg-purple-700">
+              <Link href={isMe ? '/' : `/?opponent=${targetWallet}`}>
+                {isMe ? 'Play First Match' : 'Challenge to Duel'}
+              </Link>
+            </Button>
+          </div>
+        </Card>
+      )}
+
       {/* Active Room Alert if in a duel */}
       {profile?.activeRoom && !profile.activeRoom.equals(PublicKey.default) && (
         <Card className="border-amber-500/40 bg-amber-500/10 shadow-sm">
@@ -186,68 +237,70 @@ export default function ProfilePage({ params }: { params: Promise<{ wallet: stri
         </Card>
       )}
 
-      {/* Stats Cards Grid */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        {/* Rating Card */}
-        <Card className="border-neutral-200 dark:border-neutral-800 shadow-sm">
-          <CardHeader className="p-4 pb-2">
-            <CardDescription className="text-xs flex items-center justify-between">
-              <span>Skill Rating (Elo)</span>
-              <Trophy className="w-4 h-4 text-purple-500" />
-            </CardDescription>
-            <CardTitle className="text-2xl font-black">{rating}</CardTitle>
-          </CardHeader>
-          <CardContent className="p-4 pt-0">
-            <p className="text-xs text-neutral-500">Skill matches only</p>
-          </CardContent>
-        </Card>
+      {/* Stats Cards Grid - only shown if profile exists or is loading */}
+      {(profile || isLoading) && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          {/* Rating Card */}
+          <Card className="border-neutral-200 dark:border-neutral-800 shadow-sm">
+            <CardHeader className="p-4 pb-2">
+              <CardDescription className="text-xs flex items-center justify-between">
+                <span>Skill Rating (Elo)</span>
+                <Trophy className="w-4 h-4 text-purple-500" />
+              </CardDescription>
+              <CardTitle className="text-2xl font-black">{rating}</CardTitle>
+            </CardHeader>
+            <CardContent className="p-4 pt-0">
+              <p className="text-xs text-neutral-500">Skill matches only</p>
+            </CardContent>
+          </Card>
 
-        {/* Record & Win Rate */}
-        <Card className="border-neutral-200 dark:border-neutral-800 shadow-sm">
-          <CardHeader className="p-4 pb-2">
-            <CardDescription className="text-xs flex items-center justify-between">
-              <span>Win Rate</span>
-              <Shield className="w-4 h-4 text-emerald-500" />
-            </CardDescription>
-            <CardTitle className="text-2xl font-black">{winRate}%</CardTitle>
-          </CardHeader>
-          <CardContent className="p-4 pt-0">
-            <p className="text-xs text-neutral-500">
-              {wins}W · {losses}L · {draws}D
-            </p>
-          </CardContent>
-        </Card>
+          {/* Record & Win Rate */}
+          <Card className="border-neutral-200 dark:border-neutral-800 shadow-sm">
+            <CardHeader className="p-4 pb-2">
+              <CardDescription className="text-xs flex items-center justify-between">
+                <span>Win Rate</span>
+                <Shield className="w-4 h-4 text-emerald-500" />
+              </CardDescription>
+              <CardTitle className="text-2xl font-black">{winRate}%</CardTitle>
+            </CardHeader>
+            <CardContent className="p-4 pt-0">
+              <p className="text-xs text-neutral-500">
+                {wins}W · {losses}L · {draws}D
+              </p>
+            </CardContent>
+          </Card>
 
-        {/* Current Streak */}
-        <Card className="border-neutral-200 dark:border-neutral-800 shadow-sm">
-          <CardHeader className="p-4 pb-2">
-            <CardDescription className="text-xs flex items-center justify-between">
-              <span>Current Streak</span>
-              <Flame className="w-4 h-4 text-orange-500" />
-            </CardDescription>
-            <CardTitle className="text-2xl font-black text-orange-500 flex items-center gap-1.5">
-              {streak} <span className="text-xs font-normal text-neutral-400">wins</span>
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="p-4 pt-0">
-            <p className="text-xs text-neutral-500">Consecutive victories</p>
-          </CardContent>
-        </Card>
+          {/* Current Streak */}
+          <Card className="border-neutral-200 dark:border-neutral-800 shadow-sm">
+            <CardHeader className="p-4 pb-2">
+              <CardDescription className="text-xs flex items-center justify-between">
+                <span>Current Streak</span>
+                <Flame className="w-4 h-4 text-orange-500" />
+              </CardDescription>
+              <CardTitle className="text-2xl font-black text-orange-500 flex items-center gap-1.5">
+                {streak} <span className="text-xs font-normal text-neutral-400">wins</span>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-4 pt-0">
+              <p className="text-xs text-neutral-500">Consecutive victories</p>
+            </CardContent>
+          </Card>
 
-        {/* Best Streak */}
-        <Card className="border-neutral-200 dark:border-neutral-800 shadow-sm">
-          <CardHeader className="p-4 pb-2">
-            <CardDescription className="text-xs flex items-center justify-between">
-              <span>Best Streak</span>
-              <Sparkles className="w-4 h-4 text-amber-500" />
-            </CardDescription>
-            <CardTitle className="text-2xl font-black">{bestStreak}</CardTitle>
-          </CardHeader>
-          <CardContent className="p-4 pt-0">
-            <p className="text-xs text-neutral-500">All-time highest</p>
-          </CardContent>
-        </Card>
-      </div>
+          {/* Best Streak */}
+          <Card className="border-neutral-200 dark:border-neutral-800 shadow-sm">
+            <CardHeader className="p-4 pb-2">
+              <CardDescription className="text-xs flex items-center justify-between">
+                <span>Best Streak</span>
+                <Sparkles className="w-4 h-4 text-amber-500" />
+              </CardDescription>
+              <CardTitle className="text-2xl font-black">{bestStreak}</CardTitle>
+            </CardHeader>
+            <CardContent className="p-4 pt-0">
+              <p className="text-xs text-neutral-500">All-time highest</p>
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
       {/* Badges Showcase Section */}
       <div className="space-y-4">

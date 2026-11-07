@@ -11,10 +11,12 @@ import {
   useSolduelProgram,
   useRoomAccount,
   getProfilePda,
+  getWaitingSpotPda,
 } from '@/components/solduel/solduel-data-access';
 import { GetTestSolButton } from '@/components/solduel/get-test-sol-button';
 import { STAKE_TIERS_COINS, LAMPORTS_PER_COIN, TIMEOUT_GRACE_SECS } from '@/config';
 import { getGame } from '@/games';
+import { GameKind } from '@/games/types';
 import {
   ArrowLeft,
   Clock,
@@ -35,6 +37,9 @@ const GAME_NAMES: Record<number, string> = {
   3: 'Dice Duel',
 };
 
+/**
+ * Match Room page subscribing to real-time on-chain game state, turns, and timeouts.
+ */
 export default function RoomPage({
   params,
 }: {
@@ -52,13 +57,6 @@ export default function RoomPage({
   const [isClaimingTimeout, setIsClaimingTimeout] = useState(false);
   const [isSubmittingMove, setIsSubmittingMove] = useState(false);
   const [nowTs, setNowTs] = useState<number>(() => Math.floor(Date.now() / 1000));
-  const [shareUrl, setShareUrl] = useState<string>('');
-
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      setShareUrl(window.location.href);
-    }
-  }, []);
 
   // Update clock every second
   useEffect(() => {
@@ -103,12 +101,16 @@ export default function RoomPage({
     return -1;
   }, [wallet.publicKey, room]);
 
-  const handleCopyLink = () => {
+  const handleCopyLink = async () => {
     if (typeof window === 'undefined') return;
-    navigator.clipboard.writeText(window.location.href);
-    setCopied(true);
-    toast.success('Room link copied to clipboard!');
-    setTimeout(() => setCopied(false), 2000);
+    try {
+      await navigator.clipboard.writeText(window.location.href);
+      setCopied(true);
+      toast.success('Room link copied to clipboard!');
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      toast.error('Failed to copy room link');
+    }
   };
 
   const handleJoin = async () => {
@@ -121,11 +123,10 @@ export default function RoomPage({
     try {
       const [myProfilePda] = getProfilePda(wallet.publicKey);
       toast.info('Joining match...');
-      await (program.methods as any)
+      await program.methods
         .joinRoom()
         .accounts({
           room: roomPubkey,
-          profile: myProfilePda,
           player: wallet.publicKey,
         })
         .rpc();
@@ -148,13 +149,23 @@ export default function RoomPage({
     try {
       const [myProfilePda] = getProfilePda(wallet.publicKey);
       toast.info('Cancelling room and refunding stake...');
-      await (program.methods as any)
+      
+      const remainingAccounts = [];
+      if (room?.isQuickPlay) {
+        const [spotPda] = getWaitingSpotPda(room.game, room.tier);
+        remainingAccounts.push({
+          pubkey: spotPda,
+          isSigner: false,
+          isWritable: true,
+        });
+      }
+
+      await program.methods
         .cancelRoom()
         .accounts({
-          room: roomPubkey,
-          profile: myProfilePda,
           creator: wallet.publicKey,
         })
+        .remainingAccounts(remainingAccounts)
         .rpc();
 
       toast.success('Room cancelled! Stakes and rent refunded.');
@@ -177,7 +188,7 @@ export default function RoomPage({
       const [p1ProfilePda] = getProfilePda(room.players[1]);
 
       toast.info('Claiming timeout victory...');
-      await (program.methods as any)
+      await program.methods
         .claimTimeout()
         .accounts({
           room: roomPubkey,
@@ -210,7 +221,7 @@ export default function RoomPage({
       const [p0ProfilePda] = getProfilePda(room.players[0]);
       const [p1ProfilePda] = getProfilePda(room.players[1]);
 
-      await (program.methods as any)
+      await program.methods
         .gameAction(Buffer.from(data))
         .accounts({
           room: roomPubkey,
@@ -267,14 +278,14 @@ export default function RoomPage({
   const totalPotCoins = tierCoins * 2;
   const gameName = GAME_NAMES[room.game] || 'Custom Minigame';
 
-  const deadlineSecondsRemaining = Math.max(0, room.deadlineTs.toNumber() - nowTs);
+  const deadlineSecondsRemaining = Math.max(0, room.deadlineTs - nowTs);
   const timeoutClaimable =
     statusKey === 'active' &&
-    room.deadlineTs.toNumber() > 0 &&
-    nowTs >= room.deadlineTs.toNumber() + TIMEOUT_GRACE_SECS;
+    room.deadlineTs > 0 &&
+    nowTs >= room.deadlineTs + TIMEOUT_GRACE_SECS;
 
   // Registered game engine/ui
-  const registered = getGame(room.game as any);
+  const registered = getGame(room.game as GameKind);
 
   return (
     <div className="max-w-3xl mx-auto space-y-6 py-4">
@@ -350,7 +361,11 @@ export default function RoomPage({
               Waiting for an opponent to join...
             </div>
             <div className="flex gap-2">
-              <Input readOnly value={shareUrl || address} className="font-mono text-xs" />
+              <Input
+                readOnly
+                value={typeof window !== 'undefined' ? window.location.href : address}
+                className="font-mono text-xs"
+              />
               <Button onClick={handleCopyLink} variant="outline" size="sm" className="flex items-center gap-1.5 shrink-0">
                 {copied ? <Check className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5" />}
                 <span>{copied ? 'Copied' : 'Share Link'}</span>

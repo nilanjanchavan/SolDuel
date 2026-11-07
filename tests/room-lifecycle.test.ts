@@ -41,21 +41,27 @@ describe('Room Lifecycle & Protocol Rules', () => {
       PROGRAM_ID
     );
     expect(roomPda).toBeInstanceOf(PublicKey);
+    expect(roomPda.toBase58()).toBe('DmyePm88Q4ENToXvNvnHgkSz7anSkmMwKKa8TnpMF1VR');
     expect(typeof roomBump).toBe('number');
+    expect(roomBump).toBeGreaterThanOrEqual(0);
 
     const [profilePda, profileBump] = PublicKey.findProgramAddressSync(
       [Buffer.from(PROFILE_SEED), dummyUser.toBuffer()],
       PROGRAM_ID
     );
     expect(profilePda).toBeInstanceOf(PublicKey);
+    expect(profilePda.toBase58()).toBe('97yS4jVxBziVBnrpi6HQxXo9vGx91SXYTnE6Y183vRRL');
     expect(typeof profileBump).toBe('number');
+    expect(profileBump).toBeGreaterThanOrEqual(0);
 
     const [waitPda, waitBump] = PublicKey.findProgramAddressSync(
       [Buffer.from(WAITING_SPOT_SEED), Buffer.from([0]), Buffer.from([0])],
       PROGRAM_ID
     );
     expect(waitPda).toBeInstanceOf(PublicKey);
+    expect(waitPda.toBase58()).toBe('5gDvBsPeLoRrMq4oGtYm3foN6nYMmzzrAUyB86qaJ3Er');
     expect(typeof waitBump).toBe('number');
+    expect(waitBump).toBeGreaterThanOrEqual(0);
   });
 
   it('verifies all 7 instruction signatures exist in generated IDL', () => {

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { PublicKey, SystemProgram } from '@solana/web3.js';
 import { Button } from '@/components/ui/button';
@@ -26,15 +26,23 @@ const GAMES = [
   { id: 3, name: 'Dice Duel', desc: 'Provably fair high roller', skill: false },
 ];
 
+/**
+ * Main SolDuel Lobby component providing Quick Play matchmaking and custom room creation.
+ */
 export function SolduelLobby() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const opponentParam = searchParams.get('opponent');
+
   const { program, wallet } = useSolduelProgram();
   const [selectedGame, setSelectedGame] = useState<number>(0);
   const [selectedTier, setSelectedTier] = useState<number>(0);
-  const [allowedOpponent, setAllowedOpponent] = useState<string>('');
+  const [allowedOpponent, setAllowedOpponent] = useState<string>(opponentParam || '');
   const [isCreating, setIsCreating] = useState(false);
   const [isQuickPlaying, setIsQuickPlaying] = useState(false);
-  const [activeTab, setActiveTab] = useState<'quick' | 'custom'>('quick');
+  const [activeTab, setActiveTab] = useState<'quick' | 'custom'>(
+    opponentParam ? 'custom' : 'quick'
+  );
 
   const handleQuickPlay = async () => {
     if (!wallet.publicKey) {
@@ -63,22 +71,21 @@ export function SolduelLobby() {
       }
 
       toast.info('Joining or matching in Quick Play...');
-      const tx = await (program.methods as any)
+      await program.methods
         .quickPlay(selectedGame, selectedTier)
         .accounts({
           waitingSpot: waitingSpotPda,
           room: targetRoom,
-          profile: myProfilePda,
           player: wallet.publicKey,
-          systemProgram: SystemProgram.programId,
         })
         .rpc();
 
       toast.success('Quick Play match registered!');
       router.push(`/room/${targetRoom.toBase58()}`);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Quick Play error:', err);
-      toast.error(err.message || 'Quick Play failed. Make sure you have enough SOL.');
+      const msg = err instanceof Error ? err.message : 'Quick Play failed. Make sure you have enough SOL.';
+      toast.error(msg);
     } finally {
       setIsQuickPlaying(false);
     }
@@ -107,21 +114,19 @@ export function SolduelLobby() {
       const [myProfilePda] = getProfilePda(wallet.publicKey);
 
       toast.info('Creating match room...');
-      await (program.methods as any)
+      await program.methods
         .createRoom(selectedGame, selectedTier, opponentPubkey)
         .accounts({
-          room: myRoomPda,
-          profile: myProfilePda,
           creator: wallet.publicKey,
-          systemProgram: SystemProgram.programId,
         })
         .rpc();
 
       toast.success('Room created! Redirecting to lobby...');
       router.push(`/room/${myRoomPda.toBase58()}`);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Create room error:', err);
-      toast.error(err.message || 'Room creation failed');
+      const msg = err instanceof Error ? err.message : 'Room creation failed';
+      toast.error(msg);
     } finally {
       setIsCreating(false);
     }

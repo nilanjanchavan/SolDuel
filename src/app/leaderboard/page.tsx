@@ -20,6 +20,9 @@ import {
   Crown,
 } from 'lucide-react';
 
+/**
+ * Global SolDuel Leaderboard displaying player Elo rankings, podium, and match records.
+ */
 export default function LeaderboardPage() {
   const { publicKey } = useWallet();
   const { data: leaderboard, isLoading, refetch } = useLeaderboard();
@@ -193,6 +196,7 @@ export default function LeaderboardPage() {
       <Card className="border-neutral-200 dark:border-neutral-800 shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
+            <caption className="sr-only">SolDuel leaderboard</caption>
             <thead className="bg-neutral-50 dark:bg-neutral-900/60 text-xs text-neutral-500 uppercase border-b dark:border-neutral-800">
               <tr>
                 <th className="py-3 px-4 w-12 text-center">#</th>
@@ -206,9 +210,16 @@ export default function LeaderboardPage() {
               </tr>
             </thead>
             <tbody className="divide-y dark:divide-neutral-800/80">
-              {sortedList.map((entry, idx) => {
-                const rank = idx + 1;
-                const isUser = myWalletStr === entry.wallet;
+              {sortedList.length === 0 ? (
+                <tr>
+                  <td colSpan={8} className="py-12 text-center text-sm text-neutral-500">
+                    No duels recorded yet on the devnet leaderboard. Be the first to play and rank up!
+                  </td>
+                </tr>
+              ) : (
+                sortedList.map((entry, idx) => {
+                  const rank = idx + 1;
+                  const isUser = myWalletStr === entry.wallet || myWalletStr === entry.profilePda;
 
                 return (
                   <tr
@@ -291,7 +302,8 @@ export default function LeaderboardPage() {
                     </td>
                   </tr>
                 );
-              })}
+              })
+            )}
             </tbody>
           </table>
         </div>
@@ -299,3 +311,4 @@ export default function LeaderboardPage() {
     </div>
   );
 }
+

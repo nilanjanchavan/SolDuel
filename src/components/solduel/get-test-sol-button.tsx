@@ -8,6 +8,9 @@ import { ExternalLink, Loader2, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 
+/**
+ * Button component providing one-click Solana Devnet airdrop with fallback to official faucet.
+ */
 export function GetTestSolButton() {
   const { connection } = useConnection();
   const { publicKey } = useWallet();

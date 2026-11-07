@@ -263,8 +263,7 @@ fn test_handle_mint_badge_validation() {
         assert_eq!(err, SolduelError::BadgeRequirementNotMet.into());
     }
 
-    // 3. Earned badge minting succeeds (First Win = index 0)
-    let minted_flag_0 = 1u32 << (BADGE_MINTED_MASK_SHIFT + BADGE_INDEX_FIRST_WIN as u32);
+    // 3. Missing asset / mpl_core accounts returns InvalidBadge
     {
         let mut data = create_profile_data(5, 1, 0, 1050, 3, 3, BADGE_FIRST_WIN | BADGE_3_WIN_STREAK);
         let mut l_prof = 1_000_000;
@@ -284,11 +283,48 @@ fn test_handle_mint_badge_validation() {
             system_program: Program::<anchor_lang::system_program::System>::try_from(&acc_sys).unwrap(),
         };
         let ctx = Context::new(&solduel::ID, &mut accounts, &[], solduel::MintBadgeBumps {});
-        let res = handle_mint_badge(ctx, BADGE_INDEX_FIRST_WIN);
-        assert!(res.is_ok());
+        let err = handle_mint_badge(ctx, BADGE_INDEX_FIRST_WIN).unwrap_err();
+        assert_eq!(err, SolduelError::InvalidBadge.into());
     }
 
-    // 4. Duplicate mint attempt returns BadgeAlreadyMinted
+    // 4. Earned badge minting succeeds when valid asset and mpl_core are provided
+    let minted_flag_0 = 1u32 << (BADGE_MINTED_MASK_SHIFT + BADGE_INDEX_FIRST_WIN as u32);
+    {
+        let mut data = create_profile_data(5, 1, 0, 1050, 3, 3, BADGE_FIRST_WIN | BADGE_3_WIN_STREAK);
+        let mut l_prof = 1_000_000;
+        let mut l_player = 1_000_000;
+        let mut l_sys = 1_000_000;
+        let mut l_asset = 1_000_000;
+        let mut l_core = 1_000_000;
+        let mut data_player = vec![];
+        let mut data_sys = vec![];
+        let mut data_asset = vec![];
+        let mut data_core = vec![];
+
+        let asset_key = Pubkey::new_unique();
+        let core_key = mpl_core::ID;
+        let sys_key = anchor_lang::system_program::ID;
+
+        {
+            let acc_prof = AccountInfo::new(&profile_pda, false, true, &mut l_prof, &mut data, &solduel::ID, false);
+            let acc_player = AccountInfo::new(&player_key, true, true, &mut l_player, &mut data_player, &sys_key, false);
+            let acc_sys = AccountInfo::new(&sys_key, false, false, &mut l_sys, &mut data_sys, &sys_key, true);
+            let acc_asset = AccountInfo::new(&asset_key, true, true, &mut l_asset, &mut data_asset, &sys_key, false);
+            let acc_core = AccountInfo::new(&core_key, false, false, &mut l_core, &mut data_core, &sys_key, true);
+
+            let remaining = [acc_asset, acc_core];
+            let mut accounts = MintBadge {
+                profile: Account::<Profile>::try_from(&acc_prof).unwrap(),
+                player: Signer::try_from(&acc_player).unwrap(),
+                system_program: Program::<anchor_lang::system_program::System>::try_from(&acc_sys).unwrap(),
+            };
+            let ctx = Context::new(&solduel::ID, &mut accounts, &remaining, solduel::MintBadgeBumps {});
+            let res = handle_mint_badge(ctx, BADGE_INDEX_FIRST_WIN);
+            assert!(res.is_ok());
+        }
+    }
+
+    // 5. Duplicate mint attempt returns BadgeAlreadyMinted
     {
         let mut data = create_profile_data(
             5,

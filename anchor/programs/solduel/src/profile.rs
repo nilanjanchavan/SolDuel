@@ -4,6 +4,16 @@ use crate::constants::{
 };
 use crate::state::Profile;
 
+/// Updates match statistics, streaks, badge unlock flags, and Elo ratings for both players upon match conclusion.
+///
+/// # Arguments
+/// * `prof_0_acc` - AccountInfo for player 0's Profile PDA
+/// * `prof_1_acc` - AccountInfo for player 1's Profile PDA
+/// * `winner_opt` - Some(0) if player 0 won, Some(1) if player 1 won, None on draw
+/// * `is_skill` - Whether the completed game is a skill game (only skill games alter Elo ratings)
+/// * `is_direct_challenge` - Whether the match was a direct challenge with allowed_opponent (halves Elo changes)
+/// * `tier` - Stake tier (0 = 100 coins, 1 = 300 coins, 2 = 500 coins)
+/// * `is_flawless_win` - Whether the winner achieved flawless victory (e.g. Word Chain with 0 strikes)
 pub fn update_ratings_and_stats_raw(
     prof_0_acc: &AccountInfo,
     prof_1_acc: &AccountInfo,

@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { PublicKey, SystemProgram, Keypair } from '@solana/web3.js';
 import { useConnection, useWallet } from '@solana/wallet-adapter-react';
 import { useAnchorProvider } from '@/components/solana/solana-provider';
@@ -17,134 +17,33 @@ import {
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 
-export const MPL_CORE_PROGRAM_ID = new PublicKey('CoREENxT6tW1HoK8ypY1SxRMZTcVPm7R94rH4PZNhX7d');
+export {
+  MPL_CORE_PROGRAM_ID,
+  BADGE_FIRST_WIN,
+  BADGE_3_WIN_STREAK,
+  BADGE_WORD_MASTER,
+  BADGE_HIGH_ROLLER,
+  BADGE_MINTED_MASK_SHIFT,
+  BADGE_DEFINITIONS,
+  decodeProfileBuffer,
+  calculateRatingChange,
+} from './profile-utils';
+export type { BadgeInfo, ProfileAccountData } from './profile-utils';
+import {
+  MPL_CORE_PROGRAM_ID,
+  BADGE_DEFINITIONS,
+  decodeProfileBuffer,
+  ProfileAccountData,
+} from './profile-utils';
 
-export const BADGE_FIRST_WIN = 1 << 0;
-export const BADGE_3_WIN_STREAK = 1 << 1;
-export const BADGE_WORD_MASTER = 1 << 2;
-export const BADGE_HIGH_ROLLER = 1 << 3;
-export const BADGE_MINTED_MASK_SHIFT = 16;
-
-export interface BadgeInfo {
-  index: number;
-  id: string;
-  name: string;
-  description: string;
-  requirement: string;
-  flag: number;
-  mintedFlag: number;
-  icon: string;
-  gradient: string;
-  rarity: 'Common' | 'Rare' | 'Epic' | 'Legendary';
-}
-
-export const BADGE_DEFINITIONS: BadgeInfo[] = [
-  {
-    index: 0,
-    id: 'first_win',
-    name: 'First Win',
-    description: 'Claimed your very first victory in competitive minigame duels.',
-    requirement: 'Win 1 match of any minigame',
-    flag: BADGE_FIRST_WIN,
-    mintedFlag: 1 << (BADGE_MINTED_MASK_SHIFT + 0),
-    icon: '🏆',
-    gradient: 'from-amber-500/20 to-yellow-500/20 border-amber-500/40 text-amber-500',
-    rarity: 'Common',
-  },
-  {
-    index: 1,
-    id: '3_win_streak',
-    name: '3-Win Streak',
-    description: 'Relentless combat form with three consecutive victories.',
-    requirement: 'Achieve a winning streak of 3 matches',
-    flag: BADGE_3_WIN_STREAK,
-    mintedFlag: 1 << (BADGE_MINTED_MASK_SHIFT + 1),
-    icon: '🔥',
-    gradient: 'from-orange-500/20 to-red-500/20 border-orange-500/40 text-orange-500',
-    rarity: 'Rare',
-  },
-  {
-    index: 2,
-    id: 'word_master',
-    name: 'Word Master',
-    description: 'Impeccable vocabulary precision under extreme time pressure.',
-    requirement: 'Win Word Chain with 0 strikes',
-    flag: BADGE_WORD_MASTER,
-    mintedFlag: 1 << (BADGE_MINTED_MASK_SHIFT + 2),
-    icon: '⚡',
-    gradient: 'from-cyan-500/20 to-blue-500/20 border-cyan-500/40 text-cyan-400',
-    rarity: 'Epic',
-  },
-  {
-    index: 3,
-    id: 'high_roller',
-    name: 'High Roller',
-    description: 'Dared to wager at the maximum tier and emerged victorious.',
-    requirement: 'Win a duel in Tier 2 (500 coins stake)',
-    flag: BADGE_HIGH_ROLLER,
-    mintedFlag: 1 << (BADGE_MINTED_MASK_SHIFT + 3),
-    icon: '👑',
-    gradient: 'from-purple-500/20 to-pink-500/20 border-purple-500/40 text-purple-400',
-    rarity: 'Legendary',
-  },
-];
-
-export interface ProfileAccountData {
-  wins: number;
-  losses: number;
-  draws: number;
-  rating: number;
-  streak: number;
-  bestStreak: number;
-  badges: number;
-  activeRoom: PublicKey;
-  bump: number;
-}
-
-export function decodeProfileBuffer(data: Uint8Array): ProfileAccountData {
-  const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
-  return {
-    wins: view.getUint32(8, true),
-    losses: view.getUint32(12, true),
-    draws: view.getUint32(16, true),
-    rating: view.getUint16(20, true),
-    streak: view.getUint32(22, true),
-    bestStreak: view.getUint32(26, true),
-    badges: view.getUint32(30, true),
-    activeRoom: new PublicKey(data.slice(34, 66)),
-    bump: data[66],
-  };
-}
-
-export function getRoomPda(creator: PublicKey): [PublicKey, number] {
-  return PublicKey.findProgramAddressSync(
-    [Buffer.from(ROOM_SEED), creator.toBuffer()],
-    PROGRAM_ID
-  );
-}
-
-export function getProfilePda(wallet: PublicKey): [PublicKey, number] {
-  return PublicKey.findProgramAddressSync(
-    [Buffer.from(PROFILE_SEED), wallet.toBuffer()],
-    PROGRAM_ID
-  );
-}
-
-export function getWaitingSpotPda(game: number, tier: number): [PublicKey, number] {
-  return PublicKey.findProgramAddressSync(
-    [Buffer.from(WAITING_SPOT_SEED), Buffer.from([game]), Buffer.from([tier])],
-    PROGRAM_ID
-  );
-}
-
+/**
+ * Returns the Program instance connected with the active wallet provider.
+ */
 export function useSolduelProgram() {
-  const provider = useAnchorProvider();
   const { connection } = useConnection();
   const wallet = useWallet();
-
-  const program = useMemo(() => {
-    return getSolduelProgram(provider, PROGRAM_ID);
-  }, [provider]);
+  const provider = useAnchorProvider();
+  const program = getSolduelProgram(provider);
 
   return {
     program,
@@ -154,8 +53,93 @@ export function useSolduelProgram() {
   };
 }
 
+/**
+ * Derives the PDA for a match room created by a wallet.
+ *
+ * @param creator Creator public key
+ * @returns [PublicKey, number] PDA address and bump
+ */
+export function getRoomPda(creator: PublicKey): [PublicKey, number] {
+  return PublicKey.findProgramAddressSync(
+    [Buffer.from(ROOM_SEED), creator.toBuffer()],
+    PROGRAM_ID
+  );
+}
+
+/**
+ * Derives the PDA for a player's profile account.
+ *
+ * @param player Player public key
+ * @returns [PublicKey, number] PDA address and bump
+ */
+export function getProfilePda(player: PublicKey): [PublicKey, number] {
+  return PublicKey.findProgramAddressSync(
+    [Buffer.from(PROFILE_SEED), player.toBuffer()],
+    PROGRAM_ID
+  );
+}
+
+/**
+ * Derives the PDA for a matchmaking waiting spot given game and stake tier.
+ *
+ * @param game Game kind index (0..3)
+ * @param tier Stake tier index (0..2)
+ * @returns [PublicKey, number] PDA address and bump
+ */
+export function getWaitingSpotPda(game: number, tier: number): [PublicKey, number] {
+  return PublicKey.findProgramAddressSync(
+    [Buffer.from(WAITING_SPOT_SEED), Buffer.from([game]), Buffer.from([tier])],
+    PROGRAM_ID
+  );
+}
+
+/**
+ * Converts coin stake tier to lamports.
+ *
+ * @param tier Stake tier index (0..2)
+ * @returns Lamports required for stake
+ */
+export function tierToLamports(tier: number): number {
+  const coins = STAKE_TIERS_COINS[tier] || 100;
+  return coins * LAMPORTS_PER_COIN;
+}
+
+/**
+ * SolDuel Room Status enum matching Anchor on-chain status.
+ */
+export enum RoomStatus {
+  Open = 0,
+  Active = 1,
+  Finished = 2,
+  Cancelled = 3,
+}
+
+/**
+ * Deserialized representation of MatchRoom on-chain account.
+ */
+export interface MatchRoomAccountData {
+  game: number;
+  tier: number;
+  creator: PublicKey;
+  players: [PublicKey, PublicKey];
+  status: RoomStatus;
+  allowedOpponent: PublicKey | null;
+  isQuickPlay: boolean;
+  firstPlayer: number;
+  createdTs: number;
+  lastActionTs: number;
+  deadlineTs: number;
+  state: Uint8Array;
+  bump: number;
+}
+
+/**
+ * React Query hook to fetch and subscribe to a MatchRoom account.
+ *
+ * @param address Base58 public key string of the room PDA
+ */
 export function useRoomAccount(address: string) {
-  const { program } = useSolduelProgram();
+  const { program, connection } = useSolduelProgram();
 
   const roomPubkey = useMemo(() => {
     try {
@@ -167,14 +151,41 @@ export function useRoomAccount(address: string) {
 
   const query = useQuery({
     queryKey: ['room', address],
-    queryFn: async () => {
+    queryFn: async (): Promise<MatchRoomAccountData | null> => {
       if (!roomPubkey) return null;
       try {
-        const acc = await (program.account as any).matchRoom.fetch(roomPubkey);
-        return acc;
-      } catch (err) {
-        console.warn('Room fetch error (may be closed or empty):', err);
-        return null;
+        const acc = await program.account.matchRoom.fetch(roomPubkey);
+        return {
+          game: acc.game,
+          tier: acc.tier,
+          creator: acc.creator,
+          players: [acc.players[0], acc.players[1]],
+          status: acc.status as unknown as RoomStatus,
+          allowedOpponent: acc.allowedOpponent,
+          isQuickPlay: acc.isQuickPlay,
+          firstPlayer: acc.firstPlayer,
+          createdTs: Number(acc.createdTs),
+          lastActionTs: Number(acc.lastActionTs),
+          deadlineTs: Number(acc.deadlineTs),
+          state: Uint8Array.from(acc.state),
+          bump: acc.bump,
+        };
+      } catch (err: unknown) {
+        const errStr = String(err);
+        if (
+          errStr.includes('Account does not exist') ||
+          errStr.includes('could not find account') ||
+          errStr.includes('null')
+        ) {
+          return null;
+        }
+        // Check account info directly to distinguish between absent account vs RPC error
+        const info = await connection.getAccountInfo(roomPubkey);
+        if (!info || info.data.length === 0) {
+          return null;
+        }
+        // Re-throw transient network or rate-limit errors
+        throw err;
       }
     },
     enabled: !!roomPubkey,
@@ -189,28 +200,58 @@ export function useRoomAccount(address: string) {
   };
 }
 
-export function useProfileAccount(walletAddress: string) {
+/**
+ * React Query hook to fetch and subscribe to a Profile account by either wallet address or profile PDA.
+ *
+ * @param address Base58 wallet or profile PDA address
+ */
+export function useProfileAccount(address: string) {
   const { program, connection } = useSolduelProgram();
 
-  const walletPubkey = useMemo(() => {
+  const parsedPubkey = useMemo(() => {
     try {
-      return new PublicKey(walletAddress);
+      return new PublicKey(address);
     } catch {
       return null;
     }
-  }, [walletAddress]);
+  }, [address]);
 
-  const [profilePda] = useMemo(() => {
-    if (!walletPubkey) return [null, 0];
-    return getProfilePda(walletPubkey);
-  }, [walletPubkey]);
+  const [profilePda, setProfilePda] = useState<PublicKey | null>(null);
+
+  useEffect(() => {
+    if (!parsedPubkey) {
+      setProfilePda(null);
+      return;
+    }
+    let cancelled = false;
+    connection.getAccountInfo(parsedPubkey).then((info) => {
+      if (cancelled) return;
+      if (info && info.owner.equals(PROGRAM_ID) && info.data.length >= 67) {
+        // Provided address is already a valid profile PDA
+        setProfilePda(parsedPubkey);
+      } else {
+        // Derive profile PDA assuming input is a player wallet
+        const [derived] = getProfilePda(parsedPubkey);
+        setProfilePda(derived);
+      }
+    }).catch(() => {
+      if (!cancelled) {
+        const [derived] = getProfilePda(parsedPubkey);
+        setProfilePda(derived);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [parsedPubkey, connection]);
 
   const query = useQuery({
-    queryKey: ['profile', walletAddress],
+    queryKey: ['profile', address, profilePda?.toBase58()],
     queryFn: async (): Promise<ProfileAccountData | null> => {
       if (!profilePda) return null;
       try {
-        const acc = await (program.account as any).profile.fetch(profilePda);
+        const acc = await program.account.profile.fetch(profilePda);
         return {
           wins: Number(acc.wins),
           losses: Number(acc.losses),
@@ -240,10 +281,13 @@ export function useProfileAccount(walletAddress: string) {
     isLoading: query.isLoading,
     refetch: query.refetch,
     profilePda,
-    walletPubkey,
+    walletPubkey: parsedPubkey,
   };
 }
 
+/**
+ * Mutation hook to mint an earned badge as a soulbound Metaplex Core NFT.
+ */
 export function useMintBadge() {
   const { program, wallet } = useSolduelProgram();
   const queryClient = useQueryClient();
@@ -257,12 +301,10 @@ export function useMintBadge() {
       const [profilePda] = getProfilePda(wallet.publicKey);
       const assetKeypair = Keypair.generate();
 
-      const tx = await (program.methods as any)
+      const tx = await program.methods
         .mintBadge(badgeIndex)
         .accounts({
-          profile: profilePda,
           player: wallet.publicKey,
-          systemProgram: SystemProgram.programId,
         })
         .remainingAccounts([
           { pubkey: assetKeypair.publicKey, isSigner: true, isWritable: true },
@@ -284,16 +326,21 @@ export function useMintBadge() {
       queryClient.invalidateQueries({ queryKey: ['profile'] });
       queryClient.invalidateQueries({ queryKey: ['leaderboard'] });
     },
-    onError: (err: any) => {
+    onError: (err: unknown) => {
       console.error('Mint badge error:', err);
+      const message = err instanceof Error ? err.message : 'Check wallet balance and permissions';
       toast.error('Failed to mint badge', {
-        description: err?.message || 'Check wallet balance and permissions',
+        description: message,
       });
     },
   });
 }
 
+/**
+ * Entry structure for players displayed on the SolDuel global leaderboard.
+ */
 export interface LeaderboardEntry {
+  profilePda: string;
   wallet: string;
   shortAddress: string;
   rating: number;
@@ -307,8 +354,11 @@ export interface LeaderboardEntry {
   badgeCount: number;
 }
 
+/**
+ * React Query hook to fetch all registered player profiles for the leaderboard.
+ */
 export function useLeaderboard() {
-  const { program, connection } = useSolduelProgram();
+  const { program } = useSolduelProgram();
 
   return useQuery({
     queryKey: ['leaderboard'],
@@ -316,8 +366,7 @@ export function useLeaderboard() {
       const results: LeaderboardEntry[] = [];
 
       try {
-        // Fetch all profiles from program accounts
-        const accounts = await (program.account as any).profile.all();
+        const accounts = await program.account.profile.all();
         if (accounts && accounts.length > 0) {
           for (const item of accounts) {
             const acc = item.account;
@@ -328,17 +377,16 @@ export function useLeaderboard() {
             const winRate = totalGames > 0 ? Math.round((wins / totalGames) * 100) : 0;
             const badgesVal = Number(acc.badges) || 0;
 
-            // Count unlocked badges (bits 0..3)
             let badgeCount = 0;
             for (let i = 0; i < 4; i++) {
               if ((badgesVal & (1 << i)) !== 0) badgeCount++;
             }
 
-            // In PDA seeds ["profile", wallet], we can infer wallet if activeRoom or public key mapping
-            const addressStr = item.publicKey.toBase58();
+            const pdaStr = item.publicKey.toBase58();
             results.push({
-              wallet: addressStr,
-              shortAddress: `${addressStr.slice(0, 4)}...${addressStr.slice(-4)}`,
+              profilePda: pdaStr,
+              wallet: pdaStr,
+              shortAddress: `${pdaStr.slice(0, 4)}...${pdaStr.slice(-4)}`,
               rating: Number(acc.rating) || 1000,
               wins,
               losses,
@@ -353,70 +401,6 @@ export function useLeaderboard() {
         }
       } catch (err) {
         console.warn('Leaderboard program accounts fetch error:', err);
-      }
-
-      // Add devnet showcase players if list has fewer than 4 accounts to keep leaderboard populated
-      if (results.length < 4) {
-        const showcasePlayers: LeaderboardEntry[] = [
-          {
-            wallet: 'So11111111111111111111111111111111111111112',
-            shortAddress: 'So11...1112',
-            rating: 1248,
-            wins: 18,
-            losses: 4,
-            draws: 1,
-            winRate: 78,
-            streak: 6,
-            bestStreak: 8,
-            badges: BADGE_FIRST_WIN | BADGE_3_WIN_STREAK | BADGE_WORD_MASTER | BADGE_HIGH_ROLLER,
-            badgeCount: 4,
-          },
-          {
-            wallet: '9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM',
-            shortAddress: '9WzD...AWWM',
-            rating: 1184,
-            wins: 14,
-            losses: 5,
-            draws: 2,
-            winRate: 67,
-            streak: 3,
-            bestStreak: 5,
-            badges: BADGE_FIRST_WIN | BADGE_3_WIN_STREAK | BADGE_HIGH_ROLLER,
-            badgeCount: 3,
-          },
-          {
-            wallet: 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA',
-            shortAddress: 'Toke...Q5DA',
-            rating: 1112,
-            wins: 9,
-            losses: 3,
-            draws: 0,
-            winRate: 75,
-            streak: 2,
-            bestStreak: 4,
-            badges: BADGE_FIRST_WIN | BADGE_3_WIN_STREAK,
-            badgeCount: 2,
-          },
-          {
-            wallet: 'Meta6tW1HoK8ypY1SxRMZTcVPm7R94rH4PZNhX7d111',
-            shortAddress: 'Meta...X7d1',
-            rating: 1048,
-            wins: 5,
-            losses: 2,
-            draws: 1,
-            winRate: 63,
-            streak: 1,
-            bestStreak: 3,
-            badges: BADGE_FIRST_WIN,
-            badgeCount: 1,
-          },
-        ];
-
-        for (const player of showcasePlayers) {
-          if (!results.some((r) => r.wallet === player.wallet)) {
-            results.push(player);
-          }
-        }
       }
 
       // Sort by rating descending

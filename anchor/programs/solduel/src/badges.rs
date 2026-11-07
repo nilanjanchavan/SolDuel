@@ -2,12 +2,15 @@ use anchor_lang::prelude::*;
 use crate::constants::*;
 use crate::errors::SolduelError;
 use crate::MintBadge;
+#[cfg(target_os = "solana")]
 use mpl_core::instructions::CreateV1CpiBuilder;
-use mpl_core::types::{PermanentFreezeDelegate, Plugin, PluginAuthorityPair};
+#[cfg(target_os = "solana")]
+use mpl_core::types::{PermanentFreezeDelegate, Plugin, PluginAuthority, PluginAuthorityPair};
 
-/// Bit shift for minted badges in profile.badges bitmask (bits 16..19)
+/// Bit shift for minted badges in profile.badges bitmask (bits 16..19).
 pub const BADGE_MINTED_MASK_SHIFT: u32 = 16;
 
+/// Returns the display name for a given badge index.
 pub fn badge_name(badge: u8) -> String {
     match badge {
         BADGE_INDEX_FIRST_WIN => "SolDuel: First Win".to_string(),
@@ -18,6 +21,7 @@ pub fn badge_name(badge: u8) -> String {
     }
 }
 
+/// Returns the metadata URI for a given badge index.
 pub fn badge_uri(badge: u8) -> String {
     match badge {
         BADGE_INDEX_FIRST_WIN => "https://solduel.app/badges/first-win.json".to_string(),
@@ -28,6 +32,10 @@ pub fn badge_uri(badge: u8) -> String {
     }
 }
 
+/// Handles minting of an earned badge into a non-transferable Metaplex Core NFT.
+///
+/// Validates badge index, requirement flags, prior mint status, and required accounts.
+/// Uses the player's Profile PDA as the update authority and PermanentFreezeDelegate authority.
 pub fn handle_mint_badge<'info>(
     ctx: Context<'info, MintBadge<'info>>,
     badge: u8,
@@ -46,32 +54,50 @@ pub fn handle_mint_badge<'info>(
         return err!(SolduelError::BadgeAlreadyMinted);
     }
 
-    let asset_info_opt = ctx
+    let asset_info = ctx
         .remaining_accounts
         .iter()
-        .find(|a| a.is_signer && a.is_writable);
-    let mpl_core_opt = ctx
+        .find(|a| a.is_signer && a.is_writable && a.key() != ctx.accounts.player.key())
+        .ok_or(SolduelError::InvalidBadge)?;
+    let mpl_core_program = ctx
         .remaining_accounts
         .iter()
-        .find(|a| a.key() == mpl_core::ID);
+        .find(|a| a.key() == mpl_core::ID)
+        .ok_or(SolduelError::InvalidBadge)?;
 
-    if let (Some(asset_info), Some(mpl_core_program)) = (asset_info_opt, mpl_core_opt) {
-        let player_info = ctx.accounts.player.to_account_info();
-        let sys_info = ctx.accounts.system_program.to_account_info();
-        CreateV1CpiBuilder::new(mpl_core_program)
-            .asset(asset_info)
-            .payer(&player_info)
-            .owner(Some(&player_info))
-            .system_program(&sys_info)
-            .name(badge_name(badge))
-            .uri(badge_uri(badge))
-            .plugins(vec![PluginAuthorityPair {
-                plugin: Plugin::PermanentFreezeDelegate(PermanentFreezeDelegate { frozen: true }),
-                authority: None,
-            }])
-            .invoke()?;
+    let player_info = ctx.accounts.player.to_account_info();
+    let profile_info = ctx.accounts.profile.to_account_info();
+    let sys_info = ctx.accounts.system_program.to_account_info();
+    let profile_key = profile_info.key();
+
+    #[cfg(target_os = "solana")]
+    CreateV1CpiBuilder::new(mpl_core_program)
+        .asset(asset_info)
+        .payer(&player_info)
+        .owner(Some(&player_info))
+        .update_authority(Some(&profile_info))
+        .system_program(&sys_info)
+        .name(badge_name(badge))
+        .uri(badge_uri(badge))
+        .plugins(vec![PluginAuthorityPair {
+            plugin: Plugin::PermanentFreezeDelegate(PermanentFreezeDelegate { frozen: true }),
+            authority: Some(PluginAuthority::Address { address: profile_key }),
+        }])
+        .invoke()?;
+
+    #[cfg(not(target_os = "solana"))]
+    {
+        let _ = (
+            &player_info,
+            &profile_info,
+            &sys_info,
+            &profile_key,
+            asset_info,
+            mpl_core_program,
+        );
     }
 
+    // Only update profile after CPI successfully completes
     ctx.accounts.profile.badges |= minted_flag;
 
     Ok(())
