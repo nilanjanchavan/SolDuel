@@ -9,7 +9,8 @@ import { toast } from 'sonner';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 /**
- * Button component providing one-click Solana Devnet airdrop with fallback to official faucet.
+/**
+ * Component providing devnet SOL faucet requests with fallback links and balance display.
  */
 export function GetTestSolButton() {
   const { connection } = useConnection();

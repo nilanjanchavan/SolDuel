@@ -9,6 +9,9 @@ import { ThemeSelect } from '@/components/theme-select'
 import { ClusterUiSelect } from './cluster/cluster-ui'
 import { WalletButton } from '@/components/solana/solana-provider'
 
+/**
+ * Main application navigation header with wallet connection, network selector, and theme toggle.
+ */
 export function AppHeader({ links = [] }: { links: { label: string; path: string }[] }) {
   const pathname = usePathname()
   const { publicKey } = useWallet()
