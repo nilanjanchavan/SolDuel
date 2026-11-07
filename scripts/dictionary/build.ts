@@ -1,0 +1,152 @@
+import fs from 'fs';
+import path from 'path';
+import crypto from 'crypto';
+import { fileURLToPath } from 'url';
+import { MerkleTree } from 'merkletreejs';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+function sha256(buf: Buffer): Buffer {
+  return crypto.createHash('sha256').update(buf).digest();
+}
+
+export interface BuildDictionaryResult {
+  wordCount: number;
+  rootHex: string;
+  depth: number;
+  validPrefixesCount: number;
+  flagsHex: string;
+  flagsBuffer: Buffer;
+  fitsInTransaction: boolean;
+  proofBytes: number;
+}
+
+export function buildDictionary(
+  wordsFilePath = path.join(__dirname, 'words.txt'),
+  outputDir = path.join(__dirname, '../../public/dictionary')
+): BuildDictionaryResult {
+  if (!fs.existsSync(wordsFilePath)) {
+    throw new Error(`Words file not found at ${wordsFilePath}`);
+  }
+
+  const rawText = fs.readFileSync(wordsFilePath, 'utf-8');
+  const rawWords = rawText.split(/\r?\n/).map((w) => w.trim().toLowerCase());
+
+  // Filter: lowercase a-z only, minimum 3 letters, unique, sorted
+  const words = Array.from(
+    new Set(rawWords.filter((w) => /^[a-z]{3,}$/.test(w)))
+  ).sort();
+
+  const leaves = words.map((w) => sha256(Buffer.from(w, 'utf8')));
+  const tree = new MerkleTree(leaves, sha256, { sortPairs: true });
+  const rootHex = tree.getRoot().toString('hex');
+  const depth = tree.getDepth();
+  const layers = tree.getLayers();
+
+  // 676-bit flags for 26x26 two-letter combinations
+  const counts = new Array<number>(676).fill(0);
+  for (const w of words) {
+    const c0 = w.charCodeAt(0) - 97;
+    const c1 = w.charCodeAt(1) - 97;
+    const idx = c0 * 26 + c1;
+    counts[idx]++;
+  }
+
+  const flagsBuffer = Buffer.alloc(85, 0); // 85 bytes * 8 bits = 680 bits
+  let validPrefixesCount = 0;
+  for (let i = 0; i < 676; i++) {
+    if (counts[i] >= 10) {
+      validPrefixesCount++;
+      const byteIdx = Math.floor(i / 8);
+      const bitIdx = i % 8;
+      flagsBuffer[byteIdx] |= 1 << bitIdx;
+    }
+  }
+  const flagsHex = flagsBuffer.toString('hex');
+
+  // Verify Solana transaction fit
+  // Solana packet MTU: 1232 bytes
+  // Proof bytes = depth * 32
+  // Maximum English word len: ~25 bytes
+  // Account keys + signatures + overhead: ~250 bytes
+  const proofBytes = depth * 32;
+  const estimatedTxSize = proofBytes + 25 + 250;
+  const fitsInTransaction = estimatedTxSize <= 1232;
+
+  // Write outputs
+  fs.mkdirSync(outputDir, { recursive: true });
+  const shardsDir = path.join(outputDir, 'shards');
+  fs.mkdirSync(shardsDir, { recursive: true });
+
+  // 1. root.json
+  const rootMeta = {
+    root: rootHex,
+    depth,
+    wordCount: words.length,
+    validPrefixesCount,
+    flagsHex,
+    proofBytes,
+    fitsInTransaction,
+  };
+  fs.writeFileSync(path.join(outputDir, 'root.json'), JSON.stringify(rootMeta, null, 2));
+
+  // 2. words.json (for bot vocabulary)
+  fs.writeFileSync(path.join(outputDir, 'words.json'), JSON.stringify(words));
+
+  // 3. Sharded per-word proofs (sharded by first two letters)
+  const shards: Record<string, Record<string, string[]>> = {};
+  for (let i = 0; i < words.length; i++) {
+    const w = words[i];
+    const prefix = w.slice(0, 2);
+    if (!shards[prefix]) {
+      shards[prefix] = {};
+    }
+
+    const proof: string[] = [];
+    let idx = i;
+    for (let l = 0; l < layers.length - 1; l++) {
+      const layer = layers[l];
+      const sibIdx = idx ^ 1;
+      if (sibIdx < layer.length) {
+        proof.push(layer[sibIdx].toString('hex'));
+      }
+      idx = Math.floor(idx / 2);
+    }
+    shards[prefix][w] = proof;
+  }
+
+  for (const prefix of Object.keys(shards)) {
+    fs.writeFileSync(
+      path.join(shardsDir, `${prefix}.json`),
+      JSON.stringify(shards[prefix])
+    );
+  }
+
+  return {
+    wordCount: words.length,
+    rootHex,
+    depth,
+    validPrefixesCount,
+    flagsHex,
+    flagsBuffer,
+    fitsInTransaction,
+    proofBytes,
+  };
+}
+
+// Direct execution
+if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(__filename)) {
+  console.log('Building dictionary Merkle tree and shard proofs...');
+  const result = buildDictionary();
+  console.log(`\n--- Dictionary Build Summary ---`);
+  console.log(`Word list: ENABLE1 (Enhanced North American Benchmark Lexicon)`);
+  console.log(`License: Public Domain (Alan Beale & M. Cooper)`);
+  console.log(`Valid words (lowercase a-z, length >= 3): ${result.wordCount}`);
+  console.log(`Merkle Root (SHA-256): ${result.rootHex}`);
+  console.log(`Tree Depth: ${result.depth}`);
+  console.log(`Proof Size: ${result.proofBytes} bytes (${result.depth} * 32 bytes)`);
+  console.log(`Fits in Solana 1232-byte Transaction: ${result.fitsInTransaction ? 'YES' : 'NO'}`);
+  console.log(`Valid 2-letter Prefixes (>= 10 words): ${result.validPrefixesCount} / 676`);
+  console.log(`Prefix Flags Hex (85 bytes): ${result.flagsHex}`);
+}
