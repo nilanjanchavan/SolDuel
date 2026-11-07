@@ -162,8 +162,8 @@ export default function RoomPage({
       toast.info('Cancelling room and refunding stake...');
       
       const remainingAccounts = [];
-      if (room?.isQuickPlay) {
-        const [spotPda] = getWaitingSpotPda(room.game, room.tier);
+      if (currentRoom?.isQuickPlay) {
+        const [spotPda] = getWaitingSpotPda(currentRoom.game, currentRoom.tier);
         remainingAccounts.push({
           pubkey: spotPda,
           isSigner: false,
@@ -295,7 +295,7 @@ export default function RoomPage({
   const totalPotCoins = tierCoins * 2;
   const gameName = GAME_NAMES[currentRoom.game] || 'Custom Minigame';
 
-  const deadlineVal = currentRoom.deadlineTs?.toNumber ? currentRoom.deadlineTs.toNumber() : Number(currentRoom.deadlineTs || 0);
+  const deadlineVal = Number(currentRoom.deadlineTs || 0);
   const deadlineSecondsRemaining = Math.max(0, deadlineVal - nowTs);
   const timeoutClaimable =
     statusKey === 'active' &&
