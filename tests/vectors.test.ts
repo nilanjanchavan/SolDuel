@@ -1,5 +1,7 @@
 import fs from 'fs';
 import path from 'path';
+import type { Outcome } from '../src/games/types';
+import { connectFourEngine } from '../src/games/connect-four';
 
 export interface TestVector {
   players: [string, string];
@@ -28,19 +30,41 @@ describe('Shared test vectors runner', () => {
       expect(Array.isArray(vectors)).toBe(true);
 
       if (vectors.length === 0) {
-        // Empty list passes
         continue;
       }
 
-      for (const vector of vectors) {
+      for (const [idx, vector] of vectors.entries()) {
         expect(vector).toHaveProperty('players');
         expect(vector).toHaveProperty('actions');
         expect(vector).toHaveProperty('expected_outcome');
         expect(vector).toHaveProperty('final_state_hex');
-        expect(Array.isArray(vector.players)).toBe(true);
-        expect(Array.isArray(vector.actions)).toBe(true);
+        expect(vector.players.length).toBe(2);
+
+        if (file === 'connect-four.json') {
+          let state = connectFourEngine.init(0);
+          let currentPlayer: 0 | 1 = 0;
+          let lastOutcome: Outcome = 'continue';
+
+          for (const actionHex of vector.actions) {
+            const col = parseInt(actionHex, 16);
+            const res = connectFourEngine.apply(state, currentPlayer, col);
+            state = res.state;
+            lastOutcome = res.outcome;
+            currentPlayer = (1 - currentPlayer) as 0 | 1;
+          }
+
+          expect(lastOutcome).toEqual(vector.expected_outcome);
+
+          // Decode final_state_hex using engine decodeState
+          const finalStateBuf = Buffer.from(vector.final_state_hex, 'hex');
+          const decoded = connectFourEngine.decodeState(new Uint8Array(finalStateBuf));
+
+          expect(state.moves).toBe(decoded.moves);
+          expect(state.turn).toBe(decoded.turn);
+          expect(state.board).toEqual(decoded.board);
+          expect(state.lastMove).toEqual(decoded.lastMove);
+        }
       }
     }
   });
 });
-
