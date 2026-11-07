@@ -30,11 +30,10 @@ function getRandomRoll(): number {
 }
 
 function getStorageKey(room: Uint8Array | null, round: number, me: number): string {
-  const roomHex = room
-    ? Array.from(room)
-        .map((b) => b.toString(16).padStart(2, '0'))
-        .join('')
-    : 'default'
+  const norm = room || new Uint8Array(32)
+  const roomHex = Array.from(norm)
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('')
   return `solduel-dice-${roomHex}-${round}-${me}`
 }
 

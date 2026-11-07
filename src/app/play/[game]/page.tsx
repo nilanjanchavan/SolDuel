@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react'
-import { useParams, useRouter } from 'next/navigation'
+import { useParams, useRouter, notFound } from 'next/navigation'
 import Link from 'next/link'
 import { GameKind, Outcome, RegisteredGame } from '@/games/types'
 import { GAME_REGISTRY } from '@/games'
@@ -59,7 +59,7 @@ function parseGameKind(slug: string | undefined): GameKind {
     case 'connectfour':
       return GameKind.ConnectFour
     default:
-      return GameKind.Rps
+      notFound()
   }
 }
 
@@ -76,10 +76,12 @@ function PracticeMatch({ gameRecord, gameInfo, difficulty, onRematch }: Practice
 
   const [gameState, setGameState] = useState<unknown>(() => engine.init(0))
   const [outcome, setOutcome] = useState<Outcome>('continue')
+  const [botError, setBotError] = useState<string | null>(null)
+  const [botRetryCount, setBotRetryCount] = useState(0)
 
   // Check if it is currently the bot's turn to act
   const isBotThinking = useMemo(() => {
-    if (outcome !== 'continue' || !gameState || typeof gameState !== 'object') return false
+    if (outcome !== 'continue' || botError || !gameState || typeof gameState !== 'object') return false
     const s = gameState as Record<string, unknown>
     if ('phase' in s && 'commits' in s) {
       const commits = s.commits as [boolean, boolean]
@@ -92,21 +94,22 @@ function PracticeMatch({ gameRecord, gameInfo, difficulty, onRematch }: Practice
       return s.currentTurn === 1
     }
     return false
-  }, [outcome, gameState])
+  }, [outcome, botError, gameState])
 
   // Handle human move
   const handleHumanMove = useCallback(
     (move: unknown) => {
-      if (outcome !== 'continue' || isBotThinking) return
+      if (outcome !== 'continue' || isBotThinking || botError) return
       try {
         const res = engine.apply(gameState as never, 0, move as never)
         setGameState(res.state)
         setOutcome(res.outcome)
+        setBotError(null)
       } catch (err) {
         console.error('Failed to apply human move:', err)
       }
     },
-    [engine, gameState, outcome, isBotThinking],
+    [engine, gameState, outcome, isBotThinking, botError],
   )
 
   // Autonomous bot response timer
@@ -120,13 +123,20 @@ function PracticeMatch({ gameRecord, gameInfo, difficulty, onRematch }: Practice
         const res = engine.apply(gameState as never, 1, botMove as never)
         setGameState(res.state)
         setOutcome(res.outcome)
+        setBotError(null)
       } catch (err) {
         console.error('Failed to apply bot move:', err)
+        setBotError('The bot encountered an error calculating its move. You can retry or reset the match.')
       }
     }, 550)
 
     return () => clearTimeout(timer)
-  }, [isBotThinking, engine, difficulty, gameState])
+  }, [isBotThinking, engine, difficulty, gameState, botRetryCount])
+
+  const handleRetryBot = () => {
+    setBotError(null)
+    setBotRetryCount((c) => c + 1)
+  }
 
   return (
     <div className="space-y-6">
@@ -164,6 +174,29 @@ function PracticeMatch({ gameRecord, gameInfo, difficulty, onRematch }: Practice
             >
               Play for Real ⚔️
             </Link>
+          </div>
+        </div>
+      )}
+
+      {/* Bot Error Recovery Banner */}
+      {botError && (
+        <div className="p-4 rounded-xl bg-rose-950/50 border border-rose-500/40 text-rose-200 text-center space-y-2">
+          <p className="text-sm font-semibold">{botError}</p>
+          <div className="flex justify-center gap-3">
+            <button
+              type="button"
+              onClick={handleRetryBot}
+              className="px-4 py-1.5 rounded-lg text-xs font-semibold bg-rose-500 hover:bg-rose-400 text-slate-950 cursor-pointer"
+            >
+              Retry Bot
+            </button>
+            <button
+              type="button"
+              onClick={onRematch}
+              className="px-4 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-white border border-slate-700 cursor-pointer"
+            >
+              Reset Match
+            </button>
           </div>
         </div>
       )}
