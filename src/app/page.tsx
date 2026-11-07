@@ -9,7 +9,7 @@ export default function Home() {
     <Suspense
       fallback={
         <div className="container max-w-4xl py-12 text-center text-neutral-500">
-          Loading lobby...
+          Loading SolDuel Lobby...
         </div>
       }
     >

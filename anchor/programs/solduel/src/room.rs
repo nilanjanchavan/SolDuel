@@ -11,8 +11,10 @@ use crate::{CancelRoom, ClaimTimeout, CreateRoom, GameAction, JoinRoom, QuickPla
 
 /// Dummy game implementation for testing room lifecycle and dispatch.
 /// Enabled for unit/integration tests or test feature.
+#[cfg(any(test, feature = "test-game"))]
 pub struct DummyGame;
 
+#[cfg(any(test, feature = "test-game"))]
 impl Game for DummyGame {
     /// Indicates that the dummy test game affects skill rating.
     fn is_skill() -> bool {
@@ -66,6 +68,7 @@ pub fn get_tier_stake_lamports(tier: u8) -> Result<u64> {
 
 /// Checks whether a given game kind is a skill game.
 pub fn game_is_skill(game: u8) -> Result<bool> {
+    #[cfg(any(test, feature = "test-game"))]
     if game == 255 {
         return Ok(DummyGame::is_skill());
     }
@@ -80,6 +83,7 @@ pub fn game_is_skill(game: u8) -> Result<bool> {
 
 /// Initializes state for the given game kind.
 pub fn game_init(game: u8, state: &mut [u8], first_player: u8, now: i64) -> Result<()> {
+    #[cfg(any(test, feature = "test-game"))]
     if game == 255 {
         return DummyGame::init(state, first_player, now);
     }
@@ -100,6 +104,7 @@ pub fn game_apply(
     data: &[u8],
     now: i64,
 ) -> Result<Outcome> {
+    #[cfg(any(test, feature = "test-game"))]
     if game == 255 {
         return DummyGame::apply(state, player, data, now);
     }
@@ -114,6 +119,7 @@ pub fn game_apply(
 
 /// Returns move deadline duration in seconds for the given game state.
 pub fn game_deadline_secs(game: u8, state: &[u8]) -> Result<i64> {
+    #[cfg(any(test, feature = "test-game"))]
     if game == 255 {
         return Ok(DummyGame::deadline_secs(state));
     }
@@ -128,6 +134,7 @@ pub fn game_deadline_secs(game: u8, state: &[u8]) -> Result<i64> {
 
 /// Determines who is holding things up when a timeout is claimed.
 pub fn game_laggard(game: u8, state: &[u8]) -> Result<Option<u8>> {
+    #[cfg(any(test, feature = "test-game"))]
     if game == 255 {
         return Ok(DummyGame::laggard(state));
     }
@@ -137,6 +144,21 @@ pub fn game_laggard(game: u8, state: &[u8]) -> Result<Option<u8>> {
         Some(GameKind::Rps) => Ok(RockPaperScissors::laggard(state)),
         Some(GameKind::Dice) => Ok(DiceDuel::laggard(state)),
         None => err!(SolduelError::InvalidGame),
+    }
+}
+
+/// Determines if a game outcome was a flawless win (e.g. Word Chain with 0 strikes).
+pub fn game_flawless_win(game: u8, state: &[u8], winner: u8) -> bool {
+    #[cfg(any(test, feature = "test-game"))]
+    if game == 255 {
+        return false;
+    }
+    match GameKind::from_u8(game) {
+        Some(GameKind::ConnectFour) => ConnectFour::flawless_win(state, winner),
+        Some(GameKind::WordChain) => WordChain::flawless_win(state, winner),
+        Some(GameKind::Rps) => RockPaperScissors::flawless_win(state, winner),
+        Some(GameKind::Dice) => DiceDuel::flawless_win(state, winner),
+        None => false,
     }
 }
 
@@ -153,7 +175,12 @@ pub fn handle_create_room(
     tier: u8,
     allowed_opponent: Option<Pubkey>,
 ) -> Result<()> {
-    if game != 255 && GameKind::from_u8(game).is_none() {
+    #[cfg(any(test, feature = "test-game"))]
+    let is_valid_game = game == 255 || GameKind::from_u8(game).is_some();
+    #[cfg(not(any(test, feature = "test-game")))]
+    let is_valid_game = GameKind::from_u8(game).is_some();
+
+    if !is_valid_game {
         return err!(SolduelError::InvalidGame);
     }
     let stake = get_tier_stake_lamports(tier)?;
@@ -207,6 +234,9 @@ pub fn handle_create_room(
 pub fn handle_join_room(ctx: Context<JoinRoom>) -> Result<()> {
     let room = &mut ctx.accounts.room;
     if room.status != RoomStatus::Open {
+        return err!(SolduelError::RoomNotOpen);
+    }
+    if room.is_quick_play {
         return err!(SolduelError::RoomNotOpen);
     }
 
@@ -268,7 +298,12 @@ pub fn handle_join_room(ctx: Context<JoinRoom>) -> Result<()> {
 
 /// Handler for quick_play instruction.
 pub fn handle_quick_play(ctx: Context<QuickPlay>, game: u8, tier: u8) -> Result<()> {
-    if game != 255 && GameKind::from_u8(game).is_none() {
+    #[cfg(any(test, feature = "test-game"))]
+    let is_valid_game = game == 255 || GameKind::from_u8(game).is_some();
+    #[cfg(not(any(test, feature = "test-game")))]
+    let is_valid_game = GameKind::from_u8(game).is_some();
+
+    if !is_valid_game {
         return err!(SolduelError::InvalidGame);
     }
     let stake = get_tier_stake_lamports(tier)?;
@@ -488,24 +523,14 @@ pub fn handle_quick_play(ctx: Context<QuickPlay>, game: u8, tier: u8) -> Result<
         return err!(SolduelError::AlreadyInActiveRoom);
     }
 
-    // Create room account if not exists
-    let rent = Rent::get()?;
-    let lamports = rent.minimum_balance(MatchRoom::LEN);
-    let create_ix = anchor_lang::solana_program::system_instruction::create_account(
-        &player_info.key(),
-        &room_info.key(),
-        lamports,
-        MatchRoom::LEN as u64,
+    // Create room account if not exists (handling prefunded accounts safely)
+    init_or_allocate_pda_account(
+        player_info,
+        room_info,
+        system_program,
         ctx.program_id,
-    );
-    anchor_lang::solana_program::program::invoke_signed(
-        &create_ix,
-        &[
-            player_info.to_account_info(),
-            room_info.to_account_info(),
-            system_program.to_account_info(),
-        ],
-        &[&[ROOM_SEED, player_info.key().as_ref(), &[room_bump]]],
+        MatchRoom::LEN,
+        &[ROOM_SEED, player_info.key.as_ref(), &[room_bump]],
     )?;
 
     // Transfer stake to room
@@ -545,26 +570,15 @@ pub fn handle_quick_play(ctx: Context<QuickPlay>, game: u8, tier: u8) -> Result<
     room_data[..disc.len()].copy_from_slice(&disc);
     drop(room_data);
 
-    // Create waiting spot if empty
+    // Create waiting spot if empty (handling prefunded accounts safely)
     if waiting_spot_info.data_is_empty() {
-        let rent = Rent::get()?;
-        let lamports = rent.minimum_balance(WaitingSpot::LEN);
-        let create_spot_ix =
-            anchor_lang::solana_program::system_instruction::create_account(
-                &player_info.key(),
-                &waiting_spot_info.key(),
-                lamports,
-                WaitingSpot::LEN as u64,
-                ctx.program_id,
-            );
-        anchor_lang::solana_program::program::invoke_signed(
-            &create_spot_ix,
-            &[
-                player_info.to_account_info(),
-                waiting_spot_info.to_account_info(),
-                system_program.to_account_info(),
-            ],
-            &[&[WAITING_SPOT_SEED, &[game], &[tier], &[spot_bump]]],
+        init_or_allocate_pda_account(
+            player_info,
+            waiting_spot_info,
+            system_program,
+            ctx.program_id,
+            WaitingSpot::LEN,
+            &[WAITING_SPOT_SEED, &[game], &[tier], &[spot_bump]],
         )?;
     }
 
@@ -595,24 +609,28 @@ pub fn handle_cancel_room(ctx: Context<CancelRoom>) -> Result<()> {
         return err!(SolduelError::NotAPlayer);
     }
 
-    // If quick play, clear waiting spot if it matches this room
+    // If quick play, require and clear waiting spot if it matches this room
     if room.is_quick_play {
         let (expected_spot, _) = Pubkey::find_program_address(
             &[WAITING_SPOT_SEED, &[room.game], &[room.tier]],
             ctx.program_id,
         );
-        if let Some(spot_info) = ctx.remaining_accounts.iter().find(|a| a.key() == expected_spot) {
-            if !spot_info.data_is_empty() {
-                let mut data = spot_info.try_borrow_mut_data()?;
-                if data.len() >= WaitingSpot::LEN {
-                    let mut disc = [0u8; 8];
-                    disc.copy_from_slice(&data[0..8]);
-                    if disc == WaitingSpot::DISCRIMINATOR {
-                        let mut stored_room = [0u8; 32];
-                        stored_room.copy_from_slice(&data[8..40]);
-                        if Pubkey::new_from_array(stored_room) == room.key() {
-                            data[8..40].copy_from_slice(Pubkey::default().as_ref());
-                        }
+        let spot_info = ctx
+            .remaining_accounts
+            .iter()
+            .find(|a| a.key() == expected_spot)
+            .ok_or(SolduelError::RoomNotOpen)?;
+
+        if !spot_info.data_is_empty() {
+            let mut data = spot_info.try_borrow_mut_data()?;
+            if data.len() >= WaitingSpot::LEN {
+                let mut disc = [0u8; 8];
+                disc.copy_from_slice(&data[0..8]);
+                if disc == WaitingSpot::DISCRIMINATOR {
+                    let mut stored_room = [0u8; 32];
+                    stored_room.copy_from_slice(&data[8..40]);
+                    if Pubkey::new_from_array(stored_room) == room.key() {
+                        data[8..40].copy_from_slice(Pubkey::default().as_ref());
                     }
                 }
             }
@@ -632,6 +650,10 @@ pub fn handle_cancel_room(ctx: Context<CancelRoom>) -> Result<()> {
 
     room.status = RoomStatus::Cancelled;
     ctx.accounts.profile.active_room = Pubkey::default();
+
+    // Close room account by assigning to system program and resizing to 0 so PDA address can be reused
+    room_info.assign(&anchor_lang::system_program::ID);
+    room_info.resize(0)?;
 
     Ok(())
 }
@@ -763,7 +785,22 @@ pub fn finish_room(
         MatchResult::Win(idx) => Some(idx),
         MatchResult::Draw => None,
     };
-    update_ratings_and_stats_raw(prof_0_acc, prof_1_acc, winner_opt, is_skill)?;
+    let is_flawless = if let Some(w) = winner_opt {
+        game_flawless_win(room.game, &room.state, w)
+    } else {
+        false
+    };
+    let is_direct_challenge = room.allowed_opponent.is_some();
+
+    update_ratings_and_stats_raw(
+        prof_0_acc,
+        prof_1_acc,
+        winner_opt,
+        is_skill,
+        is_direct_challenge,
+        room.tier,
+        is_flawless,
+    )?;
 
     // Execute payouts / refunds
     match result {
@@ -809,6 +846,83 @@ pub fn finish_room(
 
     // Mark room finished after all transfers and profile updates succeed
     room.status = RoomStatus::Finished;
+
+    // Close room account by assigning to system program and resizing to 0 so PDA address can be reused
+    room_info.assign(&anchor_lang::system_program::ID);
+    room_info.resize(0)?;
+
+    Ok(())
+}
+
+/// Initializes or allocates and assigns a PDA account, handling pre-funded lamports safely.
+///
+/// If the account has zero lamports, it is created directly with system instruction `create_account`.
+/// If the account is pre-funded, it is topped up to the minimum rent-exempt balance if necessary,
+/// then allocated to the target space and assigned to the program id using the provided signer seeds.
+fn init_or_allocate_pda_account<'info>(
+    payer: &AccountInfo<'info>,
+    target_account: &AccountInfo<'info>,
+    system_program: &AccountInfo<'info>,
+    program_id: &Pubkey,
+    space: usize,
+    signer_seeds: &[&[u8]],
+) -> Result<()> {
+    let rent = Rent::get()?;
+    let required_lamports = rent.minimum_balance(space);
+
+    if target_account.lamports() == 0 {
+        let create_ix = anchor_lang::solana_program::system_instruction::create_account(
+            payer.key,
+            target_account.key,
+            required_lamports,
+            space as u64,
+            program_id,
+        );
+        anchor_lang::solana_program::program::invoke_signed(
+            &create_ix,
+            &[
+                payer.clone(),
+                target_account.clone(),
+                system_program.clone(),
+            ],
+            &[signer_seeds],
+        )?;
+    } else {
+        if target_account.lamports() < required_lamports {
+            let diff = required_lamports - target_account.lamports();
+            let transfer_ix = anchor_lang::solana_program::system_instruction::transfer(
+                payer.key,
+                target_account.key,
+                diff,
+            );
+            anchor_lang::solana_program::program::invoke(
+                &transfer_ix,
+                &[
+                    payer.clone(),
+                    target_account.clone(),
+                    system_program.clone(),
+                ],
+            )?;
+        }
+        let allocate_ix = anchor_lang::solana_program::system_instruction::allocate(
+            target_account.key,
+            space as u64,
+        );
+        anchor_lang::solana_program::program::invoke_signed(
+            &allocate_ix,
+            &[target_account.clone(), system_program.clone()],
+            &[signer_seeds],
+        )?;
+        let assign_ix = anchor_lang::solana_program::system_instruction::assign(
+            target_account.key,
+            program_id,
+        );
+        anchor_lang::solana_program::program::invoke_signed(
+            &assign_ix,
+            &[target_account.clone(), system_program.clone()],
+            &[signer_seeds],
+        )?;
+    }
 
     Ok(())
 }

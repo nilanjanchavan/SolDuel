@@ -31,11 +31,12 @@ const GAMES = [
 ];
 
 /**
- * Main game lobby for matchmaking, custom room creation, and game/tier selection.
+ * Main SolDuel Lobby component providing Quick Play matchmaking and custom room creation.
  */
 export function SolduelLobby() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const opponentParam = searchParams.get('opponent');
   const { program, wallet } = useSolduelProgram();
 
   const initialGame = useMemo(() => {
@@ -61,13 +62,14 @@ export function SolduelLobby() {
   }, [searchParams]);
 
   const initialTab = useMemo(() => {
+    if (opponentParam) return 'custom';
     const p = searchParams.get('tab');
     return p === 'custom' ? 'custom' : 'quick';
-  }, [searchParams]);
+  }, [searchParams, opponentParam]);
 
   const [selectedGame, setSelectedGame] = useState<number>(initialGame);
   const [selectedTier, setSelectedTier] = useState<number>(initialTier);
-  const [allowedOpponent, setAllowedOpponent] = useState<string>('');
+  const [allowedOpponent, setAllowedOpponent] = useState<string>(opponentParam || '');
   const [isCreating, setIsCreating] = useState(false);
   const [isQuickPlaying, setIsQuickPlaying] = useState(false);
   const [activeTab, setActiveTab] = useState<'quick' | 'custom'>(initialTab);
@@ -172,9 +174,10 @@ export function SolduelLobby() {
 
       toast.success('Quick Play match registered!');
       router.push(`/room/${targetRoom.toBase58()}`);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Quick Play error:', err);
-      toast.error(err.message || 'Quick Play failed. Make sure you have enough SOL.');
+      const msg = err instanceof Error ? err.message : 'Quick Play failed. Make sure you have enough SOL.';
+      toast.error(msg);
     } finally {
       setIsQuickPlaying(false);
     }
@@ -203,21 +206,19 @@ export function SolduelLobby() {
       const [myProfilePda] = getProfilePda(wallet.publicKey);
 
       toast.info('Creating match room...');
-      await (program.methods as any)
+      await program.methods
         .createRoom(selectedGame, selectedTier, opponentPubkey)
         .accounts({
-          room: myRoomPda,
-          profile: myProfilePda,
           creator: wallet.publicKey,
-          systemProgram: SystemProgram.programId,
         })
         .rpc();
 
       toast.success('Room created! Redirecting to lobby...');
       router.push(`/room/${myRoomPda.toBase58()}`);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Create room error:', err);
-      toast.error(err.message || 'Room creation failed');
+      const msg = err instanceof Error ? err.message : 'Room creation failed';
+      toast.error(msg);
     } finally {
       setIsCreating(false);
     }

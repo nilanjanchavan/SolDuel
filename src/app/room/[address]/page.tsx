@@ -139,7 +139,7 @@ export default function RoomPage({
     setIsJoining(true);
     try {
       toast.info('Joining match...');
-      await (program.methods as any)
+      await program.methods
         .joinRoom()
         .accounts({
           room: roomPubkey,
@@ -175,10 +175,9 @@ export default function RoomPage({
         });
       }
 
-      await (program.methods as any)
+      await program.methods
         .cancelRoom()
         .accounts({
-          room: roomPubkey,
           creator: wallet.publicKey,
         })
         .remainingAccounts(remainingAccounts)
@@ -204,7 +203,7 @@ export default function RoomPage({
       const [p1ProfilePda] = getProfilePda(currentRoom.players[1]);
 
       toast.info('Claiming timeout victory...');
-      await (program.methods as any)
+      await program.methods
         .claimTimeout()
         .accounts({
           room: roomPubkey,
@@ -237,7 +236,7 @@ export default function RoomPage({
       const [p0ProfilePda] = getProfilePda(currentRoom.players[0]);
       const [p1ProfilePda] = getProfilePda(currentRoom.players[1]);
 
-      await (program.methods as any)
+      await program.methods
         .gameAction(Buffer.from(data))
         .accounts({
           room: roomPubkey,
@@ -401,7 +400,11 @@ export default function RoomPage({
               Waiting for an opponent to join...
             </div>
             <div className="flex gap-2">
-              <Input readOnly value={shareUrl || address} className="font-mono text-xs" />
+              <Input
+                readOnly
+                value={shareUrl}
+                className="font-mono text-xs"
+              />
               <Button onClick={handleCopyLink} variant="outline" size="sm" className="flex items-center gap-1.5 shrink-0">
                 {copied ? <Check className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5" />}
                 <span>{copied ? 'Copied' : 'Share Link'}</span>

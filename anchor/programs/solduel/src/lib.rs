@@ -53,7 +53,7 @@ pub mod solduel {
     }
 
     /// Mints an unlocked profile achievement badge as a soulbound NFT.
-    pub fn mint_badge(ctx: Context<MintBadge>, badge: u8) -> Result<()> {
+    pub fn mint_badge<'info>(ctx: Context<'info, MintBadge<'info>>, badge: u8) -> Result<()> {
         badges::handle_mint_badge(ctx, badge)
     }
 }
