@@ -233,7 +233,7 @@ export function useProfileAccount(address: string) {
     staleTime: 60000,
   });
 
-  const profilePda = pdaQuery.data ?? (parsedPubkey ? getProfilePda(parsedPubkey)[0] : null);
+  const profilePda = pdaQuery.data ?? null;
 
   const query = useQuery({
     queryKey: ['profile', address, profilePda?.toBase58()],

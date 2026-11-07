@@ -236,7 +236,6 @@ export default function LeaderboardPage() {
                 sortedList.map((entry, idx) => {
                   const rank = idx + 1;
                   const isUser = myProfilePdaStr !== null && myProfilePdaStr === entry.profilePda;
-                  const canDuel = !isUser && entry.wallet !== entry.profilePda;
 
                 return (
                   <tr
@@ -310,11 +309,6 @@ export default function LeaderboardPage() {
                         <Button variant="ghost" size="sm" asChild className="h-7 text-xs">
                           <Link href={`/profile/${entry.wallet}`}>Profile</Link>
                         </Button>
-                        {canDuel && (
-                          <Button size="sm" asChild className="h-7 text-xs bg-purple-600 hover:bg-purple-700">
-                            <Link href={`/?opponent=${entry.wallet}`}>Duel</Link>
-                          </Button>
-                        )}
                       </div>
                     </td>
                   </tr>
