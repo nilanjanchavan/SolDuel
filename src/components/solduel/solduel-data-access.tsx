@@ -25,6 +25,8 @@ export {
   BADGE_HIGH_ROLLER,
   BADGE_MINTED_MASK_SHIFT,
   BADGE_DEFINITIONS,
+  PROFILE_DISCRIMINATOR,
+  hasProfileDiscriminator,
   decodeProfileBuffer,
   calculateRatingChange,
 } from './profile-utils';
@@ -32,6 +34,7 @@ export type { BadgeInfo, ProfileAccountData } from './profile-utils';
 import {
   MPL_CORE_PROGRAM_ID,
   BADGE_DEFINITIONS,
+  hasProfileDiscriminator,
   decodeProfileBuffer,
   ProfileAccountData,
 } from './profile-utils';
@@ -220,7 +223,12 @@ export function useProfileAccount(address: string) {
     queryFn: async (): Promise<{ pda: PublicKey; isDirectPda: boolean } | null> => {
       if (!parsedPubkey) return null;
       const info = await connection.getAccountInfo(parsedPubkey);
-      if (info && info.owner.equals(PROGRAM_ID) && info.data.length >= 67) {
+      if (
+        info &&
+        info.owner.equals(PROGRAM_ID) &&
+        info.data.length >= 67 &&
+        hasProfileDiscriminator(info.data)
+      ) {
         return { pda: parsedPubkey, isDirectPda: true };
       }
       return { pda: getProfilePda(parsedPubkey)[0], isDirectPda: false };
@@ -252,7 +260,7 @@ export function useProfileAccount(address: string) {
       } catch {
         // Fallback to raw account info if Anchor IDL decoding differs
         const info = await connection.getAccountInfo(profilePda);
-        if (info && info.data.length >= 67) {
+        if (info && info.data.length >= 67 && hasProfileDiscriminator(info.data)) {
           return decodeProfileBuffer(info.data);
         }
         return null;
@@ -262,9 +270,12 @@ export function useProfileAccount(address: string) {
     refetchInterval: 5000,
   });
 
+  const isClassified = !pdaQuery.isLoading && pdaQuery.data !== undefined;
+
   return {
     profile: query.data,
     isLoading: pdaQuery.isLoading || (!!profilePda && query.isLoading),
+    isClassified,
     isError: pdaQuery.isError || query.isError,
     error: pdaQuery.error || query.error,
     refetch: () => {
@@ -273,7 +284,7 @@ export function useProfileAccount(address: string) {
     },
     profilePda,
     isDirectPda,
-    walletPubkey: isDirectPda ? null : parsedPubkey,
+    walletPubkey: isClassified && !isDirectPda ? parsedPubkey : null,
   };
 }
 

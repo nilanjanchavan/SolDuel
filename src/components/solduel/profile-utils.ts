@@ -118,6 +118,22 @@ export interface ProfileAccountData {
 }
 
 /**
+ * Anchor 8-byte discriminator for the Profile account type (`account:Profile`).
+ */
+export const PROFILE_DISCRIMINATOR = new Uint8Array([184, 101, 165, 188, 95, 63, 127, 188]);
+
+/**
+ * Validates whether an account buffer starts with the canonical 8-byte Profile discriminator.
+ */
+export function hasProfileDiscriminator(data: Uint8Array): boolean {
+  if (!data || data.length < 8) return false;
+  for (let i = 0; i < 8; i++) {
+    if (data[i] !== PROFILE_DISCRIMINATOR[i]) return false;
+  }
+  return true;
+}
+
+/**
  * Decodes raw binary buffer of a Profile account matching the Anchor layout.
  *
  * @param data Byte slice containing 8-byte discriminator + profile fields (67 bytes total)
@@ -128,6 +144,9 @@ export function decodeProfileBuffer(data: Uint8Array): ProfileAccountData {
     throw new Error(
       `Profile buffer too short: expected at least 67 bytes, got ${data?.length || 0}`
     );
+  }
+  if (!hasProfileDiscriminator(data)) {
+    throw new Error('Invalid Profile account discriminator');
   }
   const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
   return {

@@ -26,7 +26,7 @@ describe('Profiles & Badges Test Suite', () => {
 
   it('correctly decodes profile data from fixed Rust-compatible binary fixture', () => {
     // 67-byte fixture matching Rust on-chain Profile layout:
-    // 8 bytes discriminator
+    // 8 bytes discriminator (b8 65 a5 bc 5f 3f 7f bc)
     // wins: 10 (0a 00 00 00)
     // losses: 2 (02 00 00 00)
     // draws: 1 (01 00 00 00)
@@ -37,7 +37,7 @@ describe('Profiles & Badges Test Suite', () => {
     // active_room: 32 zero bytes
     // bump: 254 (fe)
     const fixtureHex =
-      '1122334455667788' +
+      'b865a5bc5f3f7fbc' +
       '0a000000' +
       '02000000' +
       '01000000' +
@@ -64,6 +64,14 @@ describe('Profiles & Badges Test Suite', () => {
     expect(decoded.badges & BADGE_HIGH_ROLLER).toBe(0);
     expect(decoded.activeRoom.equals(PublicKey.default)).toBe(true);
     expect(decoded.bump).toBe(254);
+  });
+
+  it('rejects decoding when discriminator is invalid or buffer too short', () => {
+    const invalidDiscBytes = new Uint8Array(67);
+    expect(() => decodeProfileBuffer(invalidDiscBytes)).toThrow('Invalid Profile account discriminator');
+
+    const shortBytes = new Uint8Array(66);
+    expect(() => decodeProfileBuffer(shortBytes)).toThrow('Profile buffer too short');
   });
 
   it('verifies integer Elo rating math and smaller gains against same/direct opponent', () => {

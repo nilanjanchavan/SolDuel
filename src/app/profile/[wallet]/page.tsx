@@ -60,8 +60,16 @@ export default function ProfilePage({ params }: { params: Promise<{ wallet: stri
     }
   }, [targetWallet]);
 
-  const { profile, isLoading, isError, error, refetch, walletPubkey, isDirectPda } =
-    useProfileAccount(targetWallet);
+  const {
+    profile,
+    isLoading,
+    isClassified,
+    isError,
+    error,
+    refetch,
+    walletPubkey,
+    isDirectPda,
+  } = useProfileAccount(targetWallet);
   const mintBadgeMutation = useMintBadge();
 
   const myProfilePda = publicKey ? getProfilePda(publicKey)[0].toBase58() : null;
@@ -69,7 +77,8 @@ export default function ProfilePage({ params }: { params: Promise<{ wallet: stri
     publicKey !== null &&
     (publicKey.toBase58() === targetWallet || myProfilePda === targetWallet);
 
-  const canChallenge = !isMe && !isDirectPda && walletPubkey !== null;
+  const canChallenge =
+    !isMe && isClassified && !isDirectPda && walletPubkey !== null;
 
   const handleCopy = async () => {
     try {

@@ -384,7 +384,7 @@ export default function RoomPage({
             {!isCreator && room.isQuickPlay && (
               <div className="space-y-2 text-center py-2">
                 <p className="text-xs text-neutral-500">
-                  This room was created through Quick Play. To match with this player, enter Quick Play with the same game and tier in the lobby.
+                  This room was created through Quick Play. Use Quick Play in the lobby with this game and tier to match with an available player.
                 </p>
                 <Button asChild className="w-full bg-purple-600 hover:bg-purple-700 text-white font-semibold py-5">
                   <Link href={`/?tab=quick&game=${room.game}&tier=${room.tier}`}>
