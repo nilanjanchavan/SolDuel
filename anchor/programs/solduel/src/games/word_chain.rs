@@ -346,35 +346,109 @@ mod tests {
     }
 
     #[test]
+    fn test_word_chain_negative_paths() {
+        let mut state = [0u8; 1024];
+        WordChain::init(&mut state, 0, 1000).unwrap();
+
+        // 1. Out of turn caller
+        let err_turn = WordChain::apply(&mut state, 1, &[], 1005).unwrap_err();
+        assert_eq!(err_turn, SolduelError::NotYourTurn.into());
+
+        // 2. Invalid player (> 1)
+        let err_player = WordChain::apply(&mut state, 2, &[], 1005).unwrap_err();
+        assert_eq!(err_player, SolduelError::NotAPlayer.into());
+
+        // 3. Truncated proof payload (claims 1 proof hash = 32 bytes, but only 10 bytes provided)
+        let mut truncated = vec![5, b's', b't', b'a', b'r', b't', 1];
+        truncated.extend_from_slice(&[0u8; 10]);
+        let out_trunc = WordChain::apply(&mut state, 0, &truncated, 1005).unwrap();
+        assert_eq!(out_trunc, Outcome::Continue);
+        assert_eq!(state[OFFSET_STRIKES_0], 1);
+
+        // 4. Non-lowercase ASCII characters
+        let uppercase = vec![5, b'S', b'T', b'A', b'R', b'T', 0];
+        let out_upper = WordChain::apply(&mut state, 0, &uppercase, 1005).unwrap();
+        assert_eq!(out_upper, Outcome::Continue);
+        assert_eq!(state[OFFSET_STRIKES_0], 2);
+
+        // Reset state for prefix violation testing
+        WordChain::init(&mut state, 0, 1000).unwrap();
+
+        // P0 plays valid "start" (ends with "rt" -> flag is 0 -> requires 1-letter start 't')
+        let p_start = load_proof_helper("start");
+        let a_start = encode_word_action("start", &p_start);
+        assert_eq!(
+            WordChain::apply(&mut state, 0, &a_start, 1000).unwrap(),
+            Outcome::Continue
+        );
+        assert_eq!(state[OFFSET_TURN], 1);
+
+        // 5. 1-letter prefix violation: P1 plays "water" (starts with 'w' instead of 't')
+        let p_water = load_proof_helper("water");
+        let a_water = encode_word_action("water", &p_water);
+        let out_pref1 = WordChain::apply(&mut state, 1, &a_water, 1000).unwrap();
+        assert_eq!(out_pref1, Outcome::Continue);
+        assert_eq!(state[OFFSET_STRIKES_1], 1);
+        assert_eq!(state[OFFSET_TURN], 1); // P1 retains turn
+
+        // P1 plays valid "train" (starts with 't', ends with "in" -> requires 2-letter start "in")
+        let p_train = load_proof_helper("train");
+        let a_train = encode_word_action("train", &p_train);
+        assert_eq!(
+            WordChain::apply(&mut state, 1, &a_train, 1000).unwrap(),
+            Outcome::Continue
+        );
+        assert_eq!(state[OFFSET_TURN], 0);
+
+        // 6. 2-letter prefix violation: P0 plays "toast" (starts with "to" instead of "in")
+        let p_toast = load_proof_helper("toast");
+        let a_toast = encode_word_action("toast", &p_toast);
+        let out_pref2 = WordChain::apply(&mut state, 0, &a_toast, 1000).unwrap();
+        assert_eq!(out_pref2, Outcome::Continue);
+        assert_eq!(state[OFFSET_STRIKES_0], 1);
+        assert_eq!(state[OFFSET_TURN], 0);
+
+        // 7. 100-word cap: Playing the 100th valid word ends the match
+        state[OFFSET_WORDS_COUNT..OFFSET_WORDS_COUNT + 2]
+            .copy_from_slice(&((MAX_WORDS - 1) as u16).to_le_bytes());
+        let p_into = load_proof_helper("into");
+        let a_into = encode_word_action("into", &p_into);
+        let out_cap = WordChain::apply(&mut state, 0, &a_into, 1000).unwrap();
+        assert_eq!(out_cap, Outcome::Draw);
+    }
+
+    fn load_proof_helper(word: &str) -> Vec<[u8; 32]> {
+        let dir = find_vectors_dir();
+        let pub_shards = dir.join("../../public/dictionary/shards");
+        let prefix = &word[0..2];
+        let shard_file = pub_shards.join(format!("{}.json", prefix));
+        let data = std::fs::read_to_string(&shard_file)
+            .unwrap_or_else(|_| panic!("Failed to read shard {}", shard_file.display()));
+        let json: serde_json::Value = serde_json::from_str(&data).unwrap();
+        let arr = json
+            .get(word)
+            .expect("Word not in shard")
+            .as_array()
+            .unwrap();
+        arr.iter()
+            .map(|v| {
+                let hex_str = v.as_str().unwrap();
+                let bytes = hex::decode(hex_str).unwrap();
+                let mut b = [0u8; 32];
+                b.copy_from_slice(&bytes);
+                b
+            })
+            .collect()
+    }
+
+    #[test]
     #[ignore]
     fn generate_word_chain_vectors() {
         let p0 = "11111111111111111111111111111111".to_string();
         let p1 = "22222222222222222222222222222222".to_string();
-
         let dir = find_vectors_dir();
-        let pub_shards = dir.join("../../public/dictionary/shards");
 
-        let load_proof = |word: &str| -> Vec<[u8; 32]> {
-            let prefix = &word[0..2];
-            let shard_file = pub_shards.join(format!("{}.json", prefix));
-            let data = std::fs::read_to_string(&shard_file)
-                .unwrap_or_else(|_| panic!("Failed to read shard {}", shard_file.display()));
-            let json: serde_json::Value = serde_json::from_str(&data).unwrap();
-            let arr = json
-                .get(word)
-                .expect("Word not in shard")
-                .as_array()
-                .unwrap();
-            arr.iter()
-                .map(|v| {
-                    let hex_str = v.as_str().unwrap();
-                    let bytes = hex::decode(hex_str).unwrap();
-                    let mut b = [0u8; 32];
-                    b.copy_from_slice(&bytes);
-                    b
-                })
-                .collect()
-        };
+        let load_proof = |word: &str| -> Vec<[u8; 32]> { load_proof_helper(word) };
 
         let mut vectors = Vec::new();
 
@@ -491,6 +565,58 @@ mod tests {
             let out_rec = WordChain::apply(&mut state, 1, &a1, 1000).unwrap();
             assert_eq!(out_rec, Outcome::Continue);
             assert_eq!(state[OFFSET_TURN], 0);
+
+            vectors.push(VectorRecord {
+                players: vec![p0.clone(), p1.clone()],
+                actions,
+                expected_outcome: serde_json::json!("continue"),
+                final_state_hex: hex::encode(&state),
+            });
+        }
+
+        // Vector 4: Negative case - Prefix violation strike and recovery
+        {
+            let mut state = [0u8; 1024];
+            WordChain::init(&mut state, 0, 1000).unwrap();
+
+            let mut actions = Vec::new();
+
+            // P0: "start" (ends with "rt" -> flag is 0 -> requires 1-letter start 't')
+            let p_start = load_proof("start");
+            let a0 = encode_word_action("start", &p_start);
+            actions.push(hex::encode(&a0));
+            assert_eq!(
+                WordChain::apply(&mut state, 0, &a0, 1000).unwrap(),
+                Outcome::Continue
+            );
+
+            // P1: prefix violation: plays "water" (starts with 'w' instead of 't') -> Strike!
+            let p_water = load_proof("water");
+            let a_water = encode_word_action("water", &p_water);
+            actions.push(hex::encode(&a_water));
+            let out_strike = WordChain::apply(&mut state, 1, &a_water, 1000).unwrap();
+            assert_eq!(out_strike, Outcome::Continue);
+            assert_eq!(state[OFFSET_STRIKES_1], 1);
+            assert_eq!(state[OFFSET_TURN], 1); // P1 retains turn
+
+            // P1 recovers with valid "train" (starts with 't', ends with "in" -> requires "in")
+            let p_train = load_proof("train");
+            let a1 = encode_word_action("train", &p_train);
+            actions.push(hex::encode(&a1));
+            assert_eq!(
+                WordChain::apply(&mut state, 1, &a1, 1000).unwrap(),
+                Outcome::Continue
+            );
+            assert_eq!(state[OFFSET_TURN], 0);
+
+            // P0 plays valid "into" (starts with "in")
+            let p_into = load_proof("into");
+            let a2 = encode_word_action("into", &p_into);
+            actions.push(hex::encode(&a2));
+            assert_eq!(
+                WordChain::apply(&mut state, 0, &a2, 1000).unwrap(),
+                Outcome::Continue
+            );
 
             vectors.push(VectorRecord {
                 players: vec![p0.clone(), p1.clone()],

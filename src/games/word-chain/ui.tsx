@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react'
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { WordChainMove, WordChainState } from './types'
 import { MAX_STRIKES, WORD_CHAIN_TIMEOUT_SECS } from './constants'
 import { getRequiredPrefix } from './bot'
@@ -17,6 +17,7 @@ export const WordChainBoard: React.FC<WordChainBoardProps> = ({ state, me, onMov
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const [isLookingUpProof, setIsLookingUpProof] = useState(false)
   const [nowTs, setNowTs] = useState(() => Date.now())
+  const abortControllerRef = useRef<AbortController | null>(null)
 
   const isMyTurn = state.currentTurn === me && !disabled
   const reqPrefix = useMemo(() => getRequiredPrefix(state.lastWord), [state.lastWord])
@@ -27,6 +28,13 @@ export const WordChainBoard: React.FC<WordChainBoardProps> = ({ state, me, onMov
       setNowTs(Date.now())
     }, 500)
     return () => clearInterval(timer)
+  }, [])
+
+  // Cleanup pending fetch on unmount
+  useEffect(() => {
+    return () => {
+      abortControllerRef.current?.abort()
+    }
   }, [])
 
   const turnStart = state.turnStartTs > 0 ? state.turnStartTs : nowTs
@@ -60,23 +68,37 @@ export const WordChainBoard: React.FC<WordChainBoardProps> = ({ state, me, onMov
       setErrorMsg(null)
       setIsLookingUpProof(true)
 
+      abortControllerRef.current?.abort()
+      const controller = new AbortController()
+      abortControllerRef.current = controller
+
       let proof: string[] | undefined = undefined
       try {
         const prefix = cleaned.slice(0, 2)
-        let res = await fetch(`/dictionary/shards/${prefix}.json`)
+        let res = await fetch(`/dictionary/shards/${prefix}.json`, { signal: controller.signal })
         if (!res.ok) {
-          res = await fetch('/dictionary/shards/_rare.json')
+          res = await fetch('/dictionary/shards/_rare.json', { signal: controller.signal })
         }
         if (res.ok) {
           const shard = await res.json()
-          if (shard[cleaned]) {
+          if (Array.isArray(shard[cleaned])) {
             proof = shard[cleaned]
           }
         }
-      } catch {
+      } catch (err: unknown) {
+        if (err instanceof Error && err.name === 'AbortError') {
+          return
+        }
         // Fallback for offline/unit test environments
       } finally {
-        setIsLookingUpProof(false)
+        if (!controller.signal.aborted) {
+          setIsLookingUpProof(false)
+        }
+      }
+
+      // Re-verify that it is still this player's turn and component is active
+      if (controller.signal.aborted || state.currentTurn !== me || disabled) {
+        return
       }
 
       setInputWord('')
@@ -86,7 +108,7 @@ export const WordChainBoard: React.FC<WordChainBoardProps> = ({ state, me, onMov
         onMove(cleaned)
       }
     },
-    [inputWord, isMyTurn, isLookingUpProof, reqPrefix, onMove],
+    [inputWord, isMyTurn, isLookingUpProof, reqPrefix, onMove, state.currentTurn, me, disabled],
   )
 
   return (
