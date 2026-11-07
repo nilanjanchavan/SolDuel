@@ -1,0 +1,54 @@
+# CodeRabbit configuration. Adjust the paths to match the scaffold's real folders.
+language: en-US
+
+reviews:
+  profile: assertive
+  high_level_summary: true
+  poem: false
+  auto_review:
+    enabled: true
+    drafts: false
+    auto_incremental_review: true
+    # Reviews pause after this many reviewed commits (the default is lower than
+    # what a busy AI-assisted hackathon branch produces). Comment
+    # "@coderabbitai review" on a PR to resume manually.
+    auto_pause_after_reviewed_commits: 25
+  path_filters:
+    - "!**/*.lock"
+    - "!**/package-lock.json"
+    - "!**/target/**"
+    - "!**/node_modules/**"
+    - "!**/.next/**"
+    - "!scripts/dictionary/data/**"
+  path_instructions:
+    - path: "anchor/programs/**/*.rs"
+      instructions: |
+        This program escrows user funds. Review for:
+        - every account validated: signer, owner, PDA seeds and bump, has_one
+        - no UncheckedAccount without a written reason
+        - checked arithmetic only; lamport transfers keep accounts rent-exempt
+        - no double join, double finish or double payout; accounts closed and rent returned
+        - timeouts use the Clock sysvar and cannot be claimed early
+        - one active room per wallet is enforced through Profile.active_room
+        - payouts come only from the two stakes; draws and cancels refund exactly
+        - frozen items in AGENTS.md (account layouts, instruction signatures) are not changed
+    - path: "anchor/programs/**/games/**"
+      instructions: |
+        Game modules must be deterministic and never panic on malformed input
+        (return errors). State must stay inside the fixed 1024-byte buffer and
+        match the TypeScript engine's encode/decode. For commit-reveal games,
+        check the hash binds player and room, the reveal must match the commit,
+        and a missing reveal forfeits after the deadline.
+    - path: "src/**/*.{ts,tsx}"
+      instructions: |
+        Use @solana/web3.js v1 and @anchor-lang/core only: no @solana/kit, no
+        @coral-xyz/anchor. Devnet only. No private keys in client code. Wallet and
+        transaction errors must be handled and shown to the user. Games must be
+        accessed through the registry in src/games/index.ts.
+    - path: "tests/**"
+      instructions: |
+        Check tests cover timeout, double finish, wrong signer, and malformed
+        action data, and that shared vectors in tests/vectors are used.
+
+chat:
+  auto_reply: true

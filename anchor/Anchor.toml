@@ -1,0 +1,21 @@
+[toolchain]
+anchor_version = "1.0.0"
+solana_version = "3.1.10"
+package_manager = "npm"
+
+[features]
+resolution = true
+skip-lint = false
+
+[programs.localnet]
+solduel = "HtmYkFnCvn8E218UrvSiAgVjpuqBVyE54B71RvCgJM7u"
+
+[programs.devnet]
+solduel = "HtmYkFnCvn8E218UrvSiAgVjpuqBVyE54B71RvCgJM7u"
+
+[provider]
+cluster = "devnet"
+wallet = "~/.config/solana/id.json"
+
+[scripts]
+test = "../node_modules/.bin/jest --preset ts-jest"
