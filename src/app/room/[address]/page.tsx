@@ -1,6 +1,6 @@
 'use client';
 
-import { use, useEffect, useState, useMemo } from 'react';
+import { use, useEffect, useState, useMemo, useSyncExternalStore } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { PublicKey } from '@solana/web3.js';
@@ -35,6 +35,8 @@ const GAME_NAMES: Record<number, string> = {
   3: 'Dice Duel',
 };
 
+const emptySubscribe = () => () => {};
+
 export default function RoomPage({
   params,
 }: {
@@ -46,19 +48,18 @@ export default function RoomPage({
   const { program, wallet, connection } = useSolduelProgram();
   const { room, isLoading, refetch, roomPubkey } = useRoomAccount(address);
 
+  const shareUrl = useSyncExternalStore(
+    emptySubscribe,
+    () => window.location.href,
+    () => address
+  );
+
   const [copied, setCopied] = useState(false);
   const [isJoining, setIsJoining] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
   const [isClaimingTimeout, setIsClaimingTimeout] = useState(false);
   const [isSubmittingMove, setIsSubmittingMove] = useState(false);
   const [nowTs, setNowTs] = useState<number>(() => Math.floor(Date.now() / 1000));
-  const [shareUrl, setShareUrl] = useState<string>('');
-
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      setShareUrl(window.location.href);
-    }
-  }, []);
 
   // Update clock every second
   useEffect(() => {
