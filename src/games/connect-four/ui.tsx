@@ -11,6 +11,9 @@ export interface BoardProps {
   disabled: boolean;
 }
 
+/**
+ * Interactive Connect Four board component with hover previews and keyboard accessibility.
+ */
 export function ConnectFourBoard({ state, me, onMove, disabled }: BoardProps) {
   const [hoverCol, setHoverCol] = useState<number | null>(null);
   const isMyTurn = state.turn === me && !disabled;
@@ -38,10 +41,16 @@ export function ConnectFourBoard({ state, me, onMove, disabled }: BoardProps) {
           }`}
         />
         <span className="font-semibold text-sm">
-          {isMyTurn ? (
-            <span className="text-emerald-600 dark:text-emerald-400">
-              Your Turn — Select a column to drop a piece
-            </span>
+          {state.turn === me ? (
+            disabled ? (
+              <span className="text-amber-500 dark:text-amber-400">
+                Your Turn — Waiting...
+              </span>
+            ) : (
+              <span className="text-emerald-600 dark:text-emerald-400">
+                Your Turn — Select a column to drop a piece
+              </span>
+            )
           ) : (
             <span className="text-neutral-500">
               Opponent’s Turn ({state.turn === 0 ? 'Player 1' : 'Player 2'})
@@ -77,14 +86,19 @@ export function ConnectFourBoard({ state, me, onMove, disabled }: BoardProps) {
             const canClick = isMyTurn && !isColFull;
 
             return (
-              <div
+              <button
+                type="button"
                 key={col}
+                aria-label={`Column ${col + 1}`}
+                disabled={!canClick}
                 onClick={() => canClick && handleColumnClick(col)}
                 onMouseEnter={() => setHoverCol(col)}
                 onMouseLeave={() => setHoverCol(null)}
-                className={`flex flex-col-reverse gap-2 sm:gap-3 rounded-xl transition ${
+                onFocus={() => isMyTurn && !isColFull && setHoverCol(col)}
+                onBlur={() => setHoverCol(null)}
+                className={`flex flex-col-reverse gap-2 sm:gap-3 rounded-xl transition p-0 bg-transparent border-0 ${
                   canClick
-                    ? 'cursor-pointer hover:bg-blue-500/30'
+                    ? 'cursor-pointer hover:bg-blue-500/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80'
                     : 'cursor-not-allowed'
                 }`}
               >
@@ -106,7 +120,7 @@ export function ConnectFourBoard({ state, me, onMove, disabled }: BoardProps) {
                     </div>
                   );
                 })}
-              </div>
+              </button>
             );
           })}
         </div>

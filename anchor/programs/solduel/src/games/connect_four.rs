@@ -7,14 +7,17 @@ pub const COLS: usize = 7;
 pub const ROWS: usize = 6;
 pub const BOARD_SIZE: usize = COLS * ROWS; // 42
 
+/// Connect Four on-chain game implementation: 7x6 board with gravity.
 pub struct ConnectFour;
 
 impl ConnectFour {
+    /// Computes the linear buffer index for a board cell at (`col`, `row`).
     #[inline]
     pub fn board_index(col: usize, row: usize) -> usize {
         4 + col * ROWS + row
     }
 
+    /// Checks if placing `piece` at (`col`, `row`) completes four in a row in any direction.
     pub fn check_win(state: &[u8], col: usize, row: usize, piece: u8) -> bool {
         let directions = [(1isize, 0isize), (0, 1), (1, 1), (1, -1)];
 

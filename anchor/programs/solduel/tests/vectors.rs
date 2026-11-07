@@ -14,6 +14,7 @@ pub struct TestVector {
     pub final_state_hex: String,
 }
 
+/// Discovers the test vectors directory from various relative run locations.
 fn find_vectors_dir() -> PathBuf {
     let candidates = [
         PathBuf::from("../../../tests/vectors"),
@@ -31,7 +32,9 @@ fn find_vectors_dir() -> PathBuf {
     panic!("Could not find tests/vectors directory in candidate paths");
 }
 
+/// Generates `connect-four.json` test vectors. Opt-in via `cargo test -- --ignored generate_connect_four_vectors`.
 #[test]
+#[ignore]
 fn generate_connect_four_vectors() {
     let vectors_dir = find_vectors_dir();
     let file_path = vectors_dir.join("connect-four.json");
@@ -141,6 +144,7 @@ fn generate_connect_four_vectors() {
     fs::write(&file_path, json_str).unwrap();
 }
 
+/// Reads and verifies all test vector files against the on-chain game implementations.
 #[test]
 fn test_all_vectors() {
     let vectors_dir = find_vectors_dir();

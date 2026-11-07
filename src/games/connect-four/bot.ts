@@ -227,10 +227,16 @@ export function getBotMove(level: 'easy' | 'medium' | 'hard', state: ConnectFour
   if (level === 'easy') {
     // 70% random, 30% check immediate win/block
     if (Math.random() < 0.3) {
+      // First scan for immediate winning move
       for (const col of validMoves) {
         const row = getLowestEmptyRow(state.board, col);
         if (checkWin(state.board, col, row, p)) return col;
-        if (checkWin(state.board, col, row, (1 - p) as 0 | 1)) return col;
+      }
+      // Next scan for immediate blocking move
+      const opp = (1 - p) as 0 | 1;
+      for (const col of validMoves) {
+        const row = getLowestEmptyRow(state.board, col);
+        if (checkWin(state.board, col, row, opp)) return col;
       }
     }
     const idx = Math.floor(Math.random() * validMoves.length);

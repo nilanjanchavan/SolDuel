@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import type { Outcome } from '../src/games/types';
 import { connectFourEngine } from '../src/games/connect-four';
 
 export interface TestVector {
@@ -42,7 +43,7 @@ describe('Shared test vectors runner', () => {
         if (file === 'connect-four.json') {
           let state = connectFourEngine.init(0);
           let currentPlayer: 0 | 1 = 0;
-          let lastOutcome: any = 'continue';
+          let lastOutcome: Outcome = 'continue';
 
           for (const actionHex of vector.actions) {
             const col = parseInt(actionHex, 16);
@@ -61,6 +62,7 @@ describe('Shared test vectors runner', () => {
           expect(state.moves).toBe(decoded.moves);
           expect(state.turn).toBe(decoded.turn);
           expect(state.board).toEqual(decoded.board);
+          expect(state.lastMove).toEqual(decoded.lastMove);
         }
       }
     }

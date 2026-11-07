@@ -8,6 +8,9 @@ export * from './types';
 export * from './bot';
 export * from './ui';
 
+/**
+ * TypeScript game engine implementation for Connect Four matching the Solana on-chain state layout.
+ */
 export const connectFourEngine: GameEngine<ConnectFourState, ConnectFourMove> = {
   kind: GameKind.ConnectFour,
   isSkill: true,
@@ -29,7 +32,7 @@ export const connectFourEngine: GameEngine<ConnectFourState, ConnectFourMove> = 
     if (s.turn !== p) {
       throw new Error('Not your turn');
     }
-    if (m < 0 || m >= COLS) {
+    if (!Number.isInteger(m) || m < 0 || m >= COLS) {
       throw new Error(`Invalid column: ${m}`);
     }
 
