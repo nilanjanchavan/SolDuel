@@ -107,9 +107,6 @@ export function getBotRpsMove(level: 'easy' | 'medium' | 'hard', state: RpsState
     if (stored) {
       return { type: 'reveal', choice: stored.choice, salt: stored.salt }
     }
-    // Fallback if state somehow unmapped
-    const fallbackChoice: RpsChoice = 0
-    const fallbackSalt = new Uint8Array(32)
-    return { type: 'reveal', choice: fallbackChoice, salt: fallbackSalt }
+    throw new Error(`No stored RPS secret for bot at round ${state.round}, player ${p}`)
   }
 }

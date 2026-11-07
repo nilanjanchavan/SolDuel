@@ -353,6 +353,69 @@ mod tests {
         assert_eq!(outcome, Outcome::Win(1));
     }
 
+    #[test]
+    fn test_rps_malformed_and_edge_inputs() {
+        let mut state = [0u8; 1024];
+        RockPaperScissors::init(&mut state, 0, 0).unwrap();
+        let room = [3u8; 32];
+        let salt = [5u8; 32];
+
+        // 1. Invalid player
+        assert!(RockPaperScissors::apply(&mut state, 2, &[0], 0).is_err());
+
+        // 2. Empty data
+        assert!(RockPaperScissors::apply(&mut state, 0, &[], 0).is_err());
+
+        // 3. Short commit payload (< 65 bytes)
+        assert!(RockPaperScissors::apply(&mut state, 0, &[ACTION_TAG_COMMIT, 1, 2], 0).is_err());
+
+        // 4. Reveal during commit phase
+        assert!(
+            RockPaperScissors::apply(&mut state, 0, &encode_reveal(RPS_ROCK, &salt), 0).is_err()
+        );
+
+        // Valid commits from both players
+        let h0 = CommitReveal::compute_hash(&room, 0, RPS_ROCK, &salt);
+        let h1 = CommitReveal::compute_hash(&room, 1, RPS_SCISSORS, &salt);
+        assert_eq!(
+            RockPaperScissors::apply(&mut state, 0, &encode_commit(&room, &h0), 0).unwrap(),
+            Outcome::Continue
+        );
+
+        // 5. Double commit by player 0
+        assert!(RockPaperScissors::apply(&mut state, 0, &encode_commit(&room, &h0), 0).is_err());
+
+        // 6. Commit with mismatched room
+        let other_room = [9u8; 32];
+        assert!(
+            RockPaperScissors::apply(&mut state, 1, &encode_commit(&other_room, &h1), 0).is_err()
+        );
+
+        // Valid player 1 commit -> advances to reveal phase
+        assert_eq!(
+            RockPaperScissors::apply(&mut state, 1, &encode_commit(&room, &h1), 0).unwrap(),
+            Outcome::Continue
+        );
+
+        // 7. Commit during reveal phase
+        assert!(RockPaperScissors::apply(&mut state, 0, &encode_commit(&room, &h0), 0).is_err());
+
+        // 8. Reveal payload too short (< 34 bytes) forfeits
+        let short_reveal = vec![ACTION_TAG_REVEAL, RPS_ROCK];
+        let out_short = RockPaperScissors::apply(&mut state, 0, &short_reveal, 0).unwrap();
+        assert_eq!(out_short, Outcome::Win(1));
+
+        // Reset for choice > 2 check
+        RockPaperScissors::init(&mut state, 0, 0).unwrap();
+        RockPaperScissors::apply(&mut state, 0, &encode_commit(&room, &h0), 0).unwrap();
+        RockPaperScissors::apply(&mut state, 1, &encode_commit(&room, &h1), 0).unwrap();
+
+        // 9. Choice > 2 (e.g. 5) forfeits
+        let out_invalid_choice =
+            RockPaperScissors::apply(&mut state, 0, &encode_reveal(5, &salt), 0).unwrap();
+        assert_eq!(out_invalid_choice, Outcome::Win(1));
+    }
+
     fn find_vectors_dir() -> std::path::PathBuf {
         let candidates = [
             std::path::PathBuf::from("../../../tests/vectors"),
@@ -600,9 +663,7 @@ mod tests {
     fn test_rps_vectors() {
         let dir = find_vectors_dir();
         let file = dir.join("rps.json");
-        if !file.exists() {
-            return;
-        }
+        assert!(file.exists(), "Vector file {} must exist", file.display());
         let data = std::fs::read_to_string(&file).unwrap();
         let vectors: Vec<VectorRecord> = serde_json::from_str(&data).unwrap();
 

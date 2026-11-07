@@ -68,34 +68,77 @@ describe('RPS Engine and Vectors', () => {
     }
   })
 
-  it('runs bots on easy, medium and hard levels', () => {
+  it('runs bots on easy, medium and hard levels without secret collisions', () => {
     const easyBot = rpsEngine.bot('easy')
     const mediumBot = rpsEngine.bot('medium')
     const hardBot = rpsEngine.bot('hard')
 
-    const state = rpsEngine.init(0)
-    state.room = new Uint8Array(32).fill(7)
+    // Match 1: Easy (P0) vs Hard (P1)
+    const state1 = rpsEngine.init(0)
+    state1.room = new Uint8Array(32).fill(7)
 
-    const m0 = easyBot(state, 0)
+    const m0 = easyBot(state1, 0)
+    const m1 = hardBot(state1, 1)
     expect(m0.type).toBe('commit')
-
-    const m1 = hardBot(state, 1)
     expect(m1.type).toBe('commit')
 
-    const mMed = mediumBot(state, 1)
-    expect(mMed.type).toBe('commit')
+    const s1_committed = rpsEngine.apply(rpsEngine.apply(state1, 0, m0).state, 1, m1).state
+    expect(s1_committed.phase).toBe('reveal')
 
-    const s1 = rpsEngine.apply(state, 0, m0).state
-    const s2 = rpsEngine.apply(s1, 1, m1).state
-    expect(s2.phase).toBe('reveal')
-
-    const r0 = easyBot(s2, 0)
+    const r0 = easyBot(s1_committed, 0)
+    const r1 = hardBot(s1_committed, 1)
     expect(r0.type).toBe('reveal')
-
-    const r1 = hardBot(s2, 1)
     expect(r1.type).toBe('reveal')
 
-    const outcome = rpsEngine.apply(rpsEngine.apply(s2, 0, r0).state, 1, r1).outcome
-    expect(['continue', 'draw', { win: 0 }, { win: 1 }]).toContainEqual(outcome)
+    const res1 = rpsEngine.apply(rpsEngine.apply(s1_committed, 0, r0).state, 1, r1)
+    expect(['continue', 'draw', { win: 0 }, { win: 1 }]).toContainEqual(res1.outcome)
+
+    // Match 2: Medium (P0) vs Hard (P1) on a distinct round to prevent secret collision
+    const state2 = rpsEngine.init(0)
+    state2.round = 1
+    state2.room = new Uint8Array(32).fill(8)
+
+    const mMed0 = mediumBot(state2, 0)
+    const mHard1 = hardBot(state2, 1)
+    const s2_committed = rpsEngine.apply(rpsEngine.apply(state2, 0, mMed0).state, 1, mHard1).state
+    const rMed0 = mediumBot(s2_committed, 0)
+    const rHard1 = hardBot(s2_committed, 1)
+    const res2 = rpsEngine.apply(rpsEngine.apply(s2_committed, 0, rMed0).state, 1, rHard1)
+    expect(['continue', 'draw', { win: 0 }, { win: 1 }]).toContainEqual(res2.outcome)
+  })
+
+  it('rejects malformed inputs and forfeits on invalid reveal or hash mismatch', () => {
+    const state = rpsEngine.init(0)
+    const room = new Uint8Array(32).fill(1)
+    state.room = room
+    const salt0 = new Uint8Array(32).fill(10)
+
+    // 1. Reveal during commit phase throws
+    expect(() => rpsEngine.apply(state, 0, { type: 'reveal', choice: 0, salt: salt0 })).toThrow()
+
+    // Valid commit P0
+    const m0: RpsMove = {
+      type: 'commit',
+      room,
+      hash: rpsEngine.encodeAction({ type: 'reveal', choice: 0, salt: salt0 }).slice(2), // placeholder
+    }
+    const s1 = rpsEngine.apply(state, 0, m0).state
+
+    // 2. Double commit by P0 throws
+    expect(() => rpsEngine.apply(s1, 0, m0)).toThrow()
+
+    // 3. Choice out of range in reveal forfeits
+    const sReveal = { ...s1, phase: 'reveal' as const, commits: [true, true] as [boolean, boolean] }
+    const outOutOfRange = rpsEngine.apply(sReveal, 0, { type: 'reveal', choice: 3 as RpsChoice, salt: salt0 }).outcome
+    expect(outOutOfRange).toEqual({ win: 1 })
+
+    // 4. Reveal with hash mismatch forfeits to opponent
+    const realHash = new Uint8Array(32).fill(99)
+    const sWithHash: typeof sReveal = { ...sReveal, commitHashes: [realHash, null] }
+    const outMismatch = rpsEngine.apply(sWithHash, 0, { type: 'reveal', choice: 0, salt: salt0 }).outcome
+    expect(outMismatch).toEqual({ win: 1 })
+
+    // 5. decodeState on short buffer throws
+    expect(() => rpsEngine.decodeState(new Uint8Array(50))).toThrow()
   })
 })

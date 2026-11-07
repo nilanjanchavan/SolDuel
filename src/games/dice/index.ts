@@ -63,29 +63,33 @@ export const diceEngine: GameEngine<DiceState, DiceMove> = {
       }
 
       // Validate choice is a 6-sided die roll (1..=6)
-      if (m.choice < 1 || m.choice > 6) {
+      if (!Number.isInteger(m.choice) || m.choice < 1 || m.choice > 6) {
         return {
           state: s,
           outcome: { win: (1 - p) as 0 | 1 },
         }
       }
 
-      // Verify commit hash if available
-      if (s.commitHashes && s.commitHashes[p]) {
-        const expected = s.commitHashes[p]!
-        const actual = computeDiceHash(s.room || new Uint8Array(32), p, m.choice, m.salt)
-        let match = true
-        for (let i = 0; i < 32; i++) {
-          if (expected[i] !== actual[i]) {
-            match = false
-            break
-          }
+      // Verify commit hash (fail closed if missing)
+      if (!s.commitHashes || !s.commitHashes[p]) {
+        return {
+          state: s,
+          outcome: { win: (1 - p) as 0 | 1 },
         }
-        if (!match) {
-          return {
-            state: s,
-            outcome: { win: (1 - p) as 0 | 1 },
-          }
+      }
+      const expected = s.commitHashes[p]!
+      const actual = computeDiceHash(s.room || new Uint8Array(32), p, m.choice, m.salt)
+      let match = true
+      for (let i = 0; i < 32; i++) {
+        if (expected[i] !== actual[i]) {
+          match = false
+          break
+        }
+      }
+      if (!match) {
+        return {
+          state: s,
+          outcome: { win: (1 - p) as 0 | 1 },
         }
       }
 
@@ -166,6 +170,9 @@ export const diceEngine: GameEngine<DiceState, DiceMove> = {
   },
 
   decodeState(buf: Uint8Array): DiceState {
+    if (buf.length < 107) {
+      throw new Error(`Buffer too short for Dice state: expected at least 107 bytes, got ${buf.length}`)
+    }
     const room = buf.slice(0, 32)
     const round = buf[32]
     const phase: 'commit' | 'reveal' = buf[33] === 1 ? 'reveal' : 'commit'

@@ -27,15 +27,68 @@ function generateSalt(): Uint8Array {
   return salt
 }
 
+function getStorageKey(room: Uint8Array | null, round: number, me: number): string {
+  const roomHex = room
+    ? Array.from(room)
+        .map((b) => b.toString(16).padStart(2, '0'))
+        .join('')
+    : 'default'
+  return `solduel-rps-${roomHex}-${round}-${me}`
+}
+
+function saveSecret(room: Uint8Array | null, round: number, me: number, choice: RpsChoice, salt: Uint8Array) {
+  if (typeof window === 'undefined') return
+  try {
+    const saltHex = Array.from(salt)
+      .map((b) => b.toString(16).padStart(2, '0'))
+      .join('')
+    window.sessionStorage.setItem(getStorageKey(room, round, me), JSON.stringify({ choice, saltHex }))
+  } catch {}
+}
+
+function loadSecret(
+  room: Uint8Array | null,
+  round: number,
+  me: number,
+): { choice: RpsChoice; salt: Uint8Array } | null {
+  if (typeof window === 'undefined') return null
+  try {
+    const raw = window.sessionStorage.getItem(getStorageKey(room, round, me))
+    if (!raw) return null
+    const parsed = JSON.parse(raw)
+    const salt = new Uint8Array(parsed.saltHex.match(/.{1,2}/g).map((byte: string) => parseInt(byte, 16)))
+    return { choice: parsed.choice, salt }
+  } catch {
+    return null
+  }
+}
+
+function clearSecret(room: Uint8Array | null, round: number, me: number) {
+  if (typeof window === 'undefined') return
+  try {
+    window.sessionStorage.removeItem(getStorageKey(room, round, me))
+  } catch {}
+}
+
 export function RpsBoard({ state, me, onMove, disabled }: RpsBoardProps) {
-  const [selectedChoice, setSelectedChoice] = useState<RpsChoice | null>(null)
-  const [mySalt, setMySalt] = useState<Uint8Array | null>(null)
+  const [selectedChoice, setSelectedChoice] = useState<RpsChoice | null>(() => {
+    const restored = loadSecret(state.room, state.round, me)
+    return restored ? restored.choice : null
+  })
+  const [mySalt, setMySalt] = useState<Uint8Array | null>(() => {
+    const restored = loadSecret(state.room, state.round, me)
+    return restored ? restored.salt : null
+  })
   const [prevRound, setPrevRound] = useState(state.round)
+  const [errorMessage, setErrorMessage] = useState<string | null>(null)
 
   if (state.round !== prevRound) {
+    clearSecret(state.room, prevRound, me)
     setPrevRound(state.round)
-    setSelectedChoice(null)
-    setMySalt(null)
+    const restored = loadSecret(state.room, state.round, me)
+    setSelectedChoice(restored ? restored.choice : null)
+    setMySalt(restored ? restored.salt : null)
+    setErrorMessage(null)
   }
 
   const opponent = (1 - me) as 0 | 1
@@ -46,10 +99,10 @@ export function RpsBoard({ state, me, onMove, disabled }: RpsBoardProps) {
 
   const handleSelectChoice = (c: RpsChoice) => {
     if (disabled || myCommitDone || state.phase !== 'commit') return
-    setSelectedChoice(c)
-
     const salt = generateSalt()
+    setSelectedChoice(c)
     setMySalt(salt)
+    saveSecret(state.room, state.round, me, c, salt)
 
     const room = state.room || new Uint8Array(32)
     const hash = computeRpsHash(room, me, c, salt)
@@ -59,13 +112,26 @@ export function RpsBoard({ state, me, onMove, disabled }: RpsBoardProps) {
 
   const handleReveal = () => {
     if (disabled || myRevealDone || state.phase !== 'reveal') return
-    if (selectedChoice === null || !mySalt) {
-      // Fallback if state was restored
-      const fallbackSalt = new Uint8Array(32)
-      onMove({ type: 'reveal', choice: 0, salt: fallbackSalt })
+    let choice = selectedChoice
+    let salt = mySalt
+
+    if (choice === null || !salt) {
+      const restored = loadSecret(state.room, state.round, me)
+      if (restored) {
+        choice = restored.choice
+        salt = restored.salt
+        setSelectedChoice(choice)
+        setMySalt(salt)
+      }
+    }
+
+    if (choice === null || !salt) {
+      setErrorMessage('Secret choice and salt missing for reveal. Cannot reveal without matching secret.')
       return
     }
-    onMove({ type: 'reveal', choice: selectedChoice, salt: mySalt })
+
+    setErrorMessage(null)
+    onMove({ type: 'reveal', choice, salt })
   }
 
   return (
@@ -160,21 +226,24 @@ export function RpsBoard({ state, me, onMove, disabled }: RpsBoardProps) {
       {state.phase === 'reveal' && (
         <div className="w-full text-center">
           {myRevealDone ? (
-            <div className="py-4 text-emerald-400 font-medium text-sm animate-pulse">
+            <div className="py-4 text-emerald-400 font-medium text-sm motion-safe:animate-pulse">
               You revealed {selectedChoice !== null ? CHOICES[selectedChoice].label : 'choice'}! Awaiting opponent...
             </div>
           ) : (
-            <button
-              type="button"
-              disabled={disabled}
-              onClick={handleReveal}
-              className="w-full py-4 px-6 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white font-bold text-lg shadow-lg shadow-emerald-900/30 transition-all cursor-pointer active:scale-98"
-            >
-              Reveal{' '}
-              {selectedChoice !== null
-                ? `${CHOICES[selectedChoice].icon} ${CHOICES[selectedChoice].label}`
-                : 'Your Move'}
-            </button>
+            <div>
+              <button
+                type="button"
+                disabled={disabled}
+                onClick={handleReveal}
+                className="w-full py-4 px-6 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white font-bold text-lg shadow-lg shadow-emerald-900/30 transition-all cursor-pointer active:scale-98"
+              >
+                Reveal{' '}
+                {selectedChoice !== null
+                  ? `${CHOICES[selectedChoice].icon} ${CHOICES[selectedChoice].label}`
+                  : 'Your Move'}
+              </button>
+              {errorMessage && <div className="mt-2 text-rose-400 text-xs">{errorMessage}</div>}
+            </div>
           )}
         </div>
       )}

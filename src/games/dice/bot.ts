@@ -43,8 +43,6 @@ export function getBotDiceMove(level: 'easy' | 'medium' | 'hard', state: DiceSta
     if (stored) {
       return { type: 'reveal', choice: stored.choice, salt: stored.salt }
     }
-    const fallbackChoice = 6
-    const fallbackSalt = new Uint8Array(32)
-    return { type: 'reveal', choice: fallbackChoice, salt: fallbackSalt }
+    throw new Error(`No stored dice secret for bot at round ${state.round}, player ${p}`)
   }
 }

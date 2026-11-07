@@ -67,34 +67,77 @@ describe('Dice Engine and Vectors', () => {
     }
   })
 
-  it('runs bots on easy, medium and hard levels', () => {
+  it('runs bots on easy, medium and hard levels without secret collisions', () => {
     const easyBot = diceEngine.bot('easy')
     const mediumBot = diceEngine.bot('medium')
     const hardBot = diceEngine.bot('hard')
 
-    const state = diceEngine.init(0)
-    state.room = new Uint8Array(32).fill(9)
+    // Match 1: Easy (P0) vs Hard (P1)
+    const state1 = diceEngine.init(0)
+    state1.room = new Uint8Array(32).fill(9)
 
-    const m0 = easyBot(state, 0)
+    const m0 = easyBot(state1, 0)
+    const m1 = hardBot(state1, 1)
     expect(m0.type).toBe('commit')
-
-    const m1 = hardBot(state, 1)
     expect(m1.type).toBe('commit')
 
-    const mMed = mediumBot(state, 1)
-    expect(mMed.type).toBe('commit')
+    const s1_committed = diceEngine.apply(diceEngine.apply(state1, 0, m0).state, 1, m1).state
+    expect(s1_committed.phase).toBe('reveal')
 
-    const s1 = diceEngine.apply(state, 0, m0).state
-    const s2 = diceEngine.apply(s1, 1, m1).state
-    expect(s2.phase).toBe('reveal')
-
-    const r0 = easyBot(s2, 0)
+    const r0 = easyBot(s1_committed, 0)
+    const r1 = hardBot(s1_committed, 1)
     expect(r0.type).toBe('reveal')
-
-    const r1 = hardBot(s2, 1)
     expect(r1.type).toBe('reveal')
 
-    const outcome = diceEngine.apply(diceEngine.apply(s2, 0, r0).state, 1, r1).outcome
-    expect(['continue', 'draw', { win: 0 }, { win: 1 }]).toContainEqual(outcome)
+    const res1 = diceEngine.apply(diceEngine.apply(s1_committed, 0, r0).state, 1, r1)
+    expect(['continue', 'draw', { win: 0 }, { win: 1 }]).toContainEqual(res1.outcome)
+
+    // Match 2: Medium (P0) vs Hard (P1) on a distinct round
+    const state2 = diceEngine.init(0)
+    state2.round = 1
+    state2.room = new Uint8Array(32).fill(11)
+
+    const mMed0 = mediumBot(state2, 0)
+    const mHard1 = hardBot(state2, 1)
+    const s2_committed = diceEngine.apply(diceEngine.apply(state2, 0, mMed0).state, 1, mHard1).state
+    const rMed0 = mediumBot(s2_committed, 0)
+    const rHard1 = hardBot(s2_committed, 1)
+    const res2 = diceEngine.apply(diceEngine.apply(s2_committed, 0, rMed0).state, 1, rHard1)
+    expect(['continue', 'draw', { win: 0 }, { win: 1 }]).toContainEqual(res2.outcome)
+  })
+
+  it('rejects malformed inputs and forfeits on invalid roll or hash mismatch', () => {
+    const state = diceEngine.init(0)
+    const room = new Uint8Array(32).fill(2)
+    state.room = room
+    const salt0 = new Uint8Array(32).fill(15)
+
+    // 1. Reveal during commit phase throws
+    expect(() => diceEngine.apply(state, 0, { type: 'reveal', choice: 4, salt: salt0 })).toThrow()
+
+    // Valid commit P0
+    const m0: DiceMove = {
+      type: 'commit',
+      room,
+      hash: new Uint8Array(32).fill(42),
+    }
+    const s1 = diceEngine.apply(state, 0, m0).state
+
+    // 2. Double commit by P0 throws
+    expect(() => diceEngine.apply(s1, 0, m0)).toThrow()
+
+    // 3. Roll out of range (0, 7, non-integer) in reveal forfeits
+    const sReveal = { ...s1, phase: 'reveal' as const, commits: [true, true] as [boolean, boolean] }
+    expect(diceEngine.apply(sReveal, 0, { type: 'reveal', choice: 0, salt: salt0 }).outcome).toEqual({ win: 1 })
+    expect(diceEngine.apply(sReveal, 0, { type: 'reveal', choice: 7, salt: salt0 }).outcome).toEqual({ win: 1 })
+    expect(diceEngine.apply(sReveal, 0, { type: 'reveal', choice: 2.5, salt: salt0 }).outcome).toEqual({ win: 1 })
+
+    // 4. Reveal with hash mismatch forfeits to opponent
+    const realHash = new Uint8Array(32).fill(99)
+    const sWithHash = { ...sReveal, commitHashes: [realHash, null] as [Uint8Array | null, Uint8Array | null] }
+    expect(diceEngine.apply(sWithHash, 0, { type: 'reveal', choice: 4, salt: salt0 }).outcome).toEqual({ win: 1 })
+
+    // 5. decodeState on short buffer throws
+    expect(() => diceEngine.decodeState(new Uint8Array(50))).toThrow()
   })
 })

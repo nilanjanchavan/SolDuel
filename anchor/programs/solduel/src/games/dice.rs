@@ -263,6 +263,73 @@ mod tests {
         assert_eq!(outcome2, Outcome::Win(1));
     }
 
+    #[test]
+    fn test_dice_malformed_and_edge_inputs() {
+        let mut state = [0u8; 1024];
+        DiceDuel::init(&mut state, 0, 0).unwrap();
+        let room = [7u8; 32];
+        let salt = [8u8; 32];
+
+        // 1. Invalid player
+        assert!(DiceDuel::apply(&mut state, 2, &[0], 0).is_err());
+
+        // 2. Empty data
+        assert!(DiceDuel::apply(&mut state, 0, &[], 0).is_err());
+
+        // 3. Short commit payload (< 65 bytes)
+        assert!(DiceDuel::apply(&mut state, 0, &[ACTION_TAG_COMMIT, 1, 2], 0).is_err());
+
+        // 4. Reveal during commit phase
+        assert!(DiceDuel::apply(&mut state, 0, &encode_reveal(4, &salt), 0).is_err());
+
+        // Valid commits from both players
+        let h0 = CommitReveal::compute_hash(&room, 0, 4, &salt);
+        let h1 = CommitReveal::compute_hash(&room, 1, 2, &salt);
+        assert_eq!(
+            DiceDuel::apply(&mut state, 0, &encode_commit(&room, &h0), 0).unwrap(),
+            Outcome::Continue
+        );
+
+        // 5. Double commit by player 0
+        assert!(DiceDuel::apply(&mut state, 0, &encode_commit(&room, &h0), 0).is_err());
+
+        // 6. Commit with mismatched room
+        let other_room = [9u8; 32];
+        assert!(DiceDuel::apply(&mut state, 1, &encode_commit(&other_room, &h1), 0).is_err());
+
+        // Valid player 1 commit -> advances to reveal phase
+        assert_eq!(
+            DiceDuel::apply(&mut state, 1, &encode_commit(&room, &h1), 0).unwrap(),
+            Outcome::Continue
+        );
+
+        // 7. Commit during reveal phase
+        assert!(DiceDuel::apply(&mut state, 0, &encode_commit(&room, &h0), 0).is_err());
+
+        // 8. Reveal payload too short (< 34 bytes) forfeits
+        let short_reveal = vec![ACTION_TAG_REVEAL, 4];
+        let out_short = DiceDuel::apply(&mut state, 0, &short_reveal, 0).unwrap();
+        assert_eq!(out_short, Outcome::Win(1));
+
+        // Reset for choice out of range (0 and 7)
+        DiceDuel::init(&mut state, 0, 0).unwrap();
+        DiceDuel::apply(&mut state, 0, &encode_commit(&room, &h0), 0).unwrap();
+        DiceDuel::apply(&mut state, 1, &encode_commit(&room, &h1), 0).unwrap();
+
+        // 9. Roll of 0 forfeits
+        let out_zero = DiceDuel::apply(&mut state, 0, &encode_reveal(0, &salt), 0).unwrap();
+        assert_eq!(out_zero, Outcome::Win(1));
+
+        // Reset for 7
+        DiceDuel::init(&mut state, 0, 0).unwrap();
+        DiceDuel::apply(&mut state, 0, &encode_commit(&room, &h0), 0).unwrap();
+        DiceDuel::apply(&mut state, 1, &encode_commit(&room, &h1), 0).unwrap();
+
+        // 10. Roll of 7 forfeits
+        let out_seven = DiceDuel::apply(&mut state, 0, &encode_reveal(7, &salt), 0).unwrap();
+        assert_eq!(out_seven, Outcome::Win(1));
+    }
+
     fn find_vectors_dir() -> std::path::PathBuf {
         let candidates = [
             std::path::PathBuf::from("../../../tests/vectors"),
@@ -510,9 +577,7 @@ mod tests {
     fn test_dice_vectors() {
         let dir = find_vectors_dir();
         let file = dir.join("dice.json");
-        if !file.exists() {
-            return;
-        }
+        assert!(file.exists(), "Vector file {} must exist", file.display());
         let data = std::fs::read_to_string(&file).unwrap();
         let vectors: Vec<VectorRecord> = serde_json::from_str(&data).unwrap();
 
