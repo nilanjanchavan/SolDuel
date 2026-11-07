@@ -14,15 +14,18 @@ use crate::{CancelRoom, ClaimTimeout, CreateRoom, GameAction, JoinRoom, QuickPla
 pub struct DummyGame;
 
 impl Game for DummyGame {
+    /// Indicates that the dummy test game affects skill rating.
     fn is_skill() -> bool {
         true
     }
 
+    /// Initializes state for the dummy test game.
     fn init(state: &mut [u8], first_player: u8, _now: i64) -> Result<()> {
         state[0] = first_player;
         Ok(())
     }
 
+    /// Applies test game actions according to test action data byte codes.
     fn apply(_state: &mut [u8], player: u8, data: &[u8], _now: i64) -> Result<Outcome> {
         if data.is_empty() {
             return Ok(Outcome::Continue);
@@ -36,10 +39,12 @@ impl Game for DummyGame {
         }
     }
 
+    /// Default test move deadline of 60 seconds.
     fn deadline_secs(_state: &[u8]) -> i64 {
         60
     }
 
+    /// Returns the holding-up player index for timeout testing.
     fn laggard(state: &[u8]) -> Option<u8> {
         match state.get(1).copied().unwrap_or(0) {
             1 => Some(0),
@@ -320,70 +325,68 @@ pub fn handle_quick_play(ctx: Context<QuickPlay>, game: u8, tier: u8) -> Result<
         let is_expired = now.saturating_sub(spot_created_ts) > QUICK_PLAY_EXPIRY_SECS;
 
         if is_expired {
-            // Expired spot: clean up old room from remaining_accounts, refund old creator, and clear spot
+            // Expired spot: clean up old room from remaining_accounts if live/matching, refund old creator, and clear spot
             let old_room_info = ctx
                 .remaining_accounts
                 .iter()
                 .find(|a| a.key() == spot_room_pubkey)
                 .ok_or(SolduelError::RoomNotOpen)?;
 
-            if old_room_info.owner != ctx.program_id {
-                return err!(SolduelError::RoomNotOpen);
-            }
-
-            let old_room: MatchRoom = {
+            let old_room = if old_room_info.owner == ctx.program_id {
                 let data = old_room_info.try_borrow_data()?;
-                if data.len() < MatchRoom::LEN || &data[..8] != MatchRoom::DISCRIMINATOR {
-                    return err!(SolduelError::RoomNotOpen);
+                if data.len() >= MatchRoom::LEN && &data[..8] == MatchRoom::DISCRIMINATOR {
+                    let mut slice = &data[8..];
+                    MatchRoom::deserialize(&mut slice).ok().filter(|room| {
+                        room.status == RoomStatus::Open
+                            && room.is_quick_play
+                            && room.game == game
+                            && room.tier == tier
+                    })
+                } else {
+                    None
                 }
-                let mut slice = &data[8..];
-                MatchRoom::deserialize(&mut slice)?
+            } else {
+                None
             };
 
-            if old_room.status != RoomStatus::Open
-                || !old_room.is_quick_play
-                || old_room.game != game
-                || old_room.tier != tier
-            {
-                return err!(SolduelError::RoomNotOpen);
+            if let Some(old_room) = old_room {
+                let old_creator_info = ctx
+                    .remaining_accounts
+                    .iter()
+                    .find(|a| a.key() == old_room.creator && a.is_writable)
+                    .ok_or(SolduelError::RoomNotOpen)?;
+
+                let (old_prof_pda, _) =
+                    Pubkey::find_program_address(&[PROFILE_SEED, old_room.creator.as_ref()], ctx.program_id);
+
+                let old_prof_info = ctx
+                    .remaining_accounts
+                    .iter()
+                    .find(|a| a.key() == old_prof_pda && a.is_writable)
+                    .ok_or(SolduelError::RoomNotOpen)?;
+
+                if old_prof_info.owner != ctx.program_id || old_prof_info.data_len() < Profile::LEN {
+                    return err!(SolduelError::RoomNotOpen);
+                }
+
+                // Clear active_room in creator's profile
+                {
+                    let mut prof_data = old_prof_info.try_borrow_mut_data()?;
+                    prof_data[34..66].copy_from_slice(Pubkey::default().as_ref());
+                }
+
+                // Refund all lamports from old room to old creator
+                let refund_amount = old_room_info.lamports();
+                **old_room_info.try_borrow_mut_lamports()? = 0;
+                **old_creator_info.try_borrow_mut_lamports()? = old_creator_info
+                    .lamports()
+                    .checked_add(refund_amount)
+                    .ok_or(SolduelError::MathOverflow)?;
+
+                // Close old room account
+                old_room_info.assign(&anchor_lang::system_program::ID);
+                old_room_info.resize(0)?;
             }
-
-            let old_creator_info = ctx
-                .remaining_accounts
-                .iter()
-                .find(|a| a.key() == old_room.creator && a.is_writable)
-                .ok_or(SolduelError::RoomNotOpen)?;
-
-            let (old_prof_pda, _) =
-                Pubkey::find_program_address(&[PROFILE_SEED, old_room.creator.as_ref()], ctx.program_id);
-
-            let old_prof_info = ctx
-                .remaining_accounts
-                .iter()
-                .find(|a| a.key() == old_prof_pda && a.is_writable)
-                .ok_or(SolduelError::RoomNotOpen)?;
-
-            if old_prof_info.owner != ctx.program_id || old_prof_info.data_len() < Profile::LEN {
-                return err!(SolduelError::RoomNotOpen);
-            }
-
-            // Clear active_room in creator's profile
-            {
-                let mut prof_data = old_prof_info.try_borrow_mut_data()?;
-                prof_data[34..66].copy_from_slice(Pubkey::default().as_ref());
-            }
-
-            // Refund all lamports from old room to old creator
-            let refund_amount = old_room_info.lamports();
-            **old_room_info.try_borrow_mut_lamports()? = 0;
-            **old_creator_info.try_borrow_mut_lamports()? = old_creator_info
-                .lamports()
-                .checked_add(refund_amount)
-                .ok_or(SolduelError::MathOverflow)?;
-
-            // Close old room account
-            old_room_info.assign(&anchor_lang::system_program::ID);
-            old_room_info.resize(0)?;
 
             // Clear waiting spot so it can be re-used
             let mut spot_data = waiting_spot_info.try_borrow_mut_data()?;
