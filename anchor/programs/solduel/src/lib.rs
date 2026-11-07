@@ -9,7 +9,6 @@ pub mod room;
 pub mod state;
 
 use constants::*;
-use errors::SolduelError;
 use state::*;
 
 declare_id!("HtmYkFnCvn8E218UrvSiAgVjpuqBVyE54B71RvCgJM7u");
@@ -19,36 +18,36 @@ pub mod solduel {
     use super::*;
 
     pub fn create_room(
-        _ctx: Context<CreateRoom>,
-        _game: u8,
-        _tier: u8,
-        _allowed_opponent: Option<Pubkey>,
+        ctx: Context<CreateRoom>,
+        game: u8,
+        tier: u8,
+        allowed_opponent: Option<Pubkey>,
     ) -> Result<()> {
-        err!(SolduelError::NotImplemented)
+        room::handle_create_room(ctx, game, tier, allowed_opponent)
     }
 
-    pub fn join_room(_ctx: Context<JoinRoom>) -> Result<()> {
-        err!(SolduelError::NotImplemented)
+    pub fn join_room(ctx: Context<JoinRoom>) -> Result<()> {
+        room::handle_join_room(ctx)
     }
 
-    pub fn quick_play(_ctx: Context<QuickPlay>, _game: u8, _tier: u8) -> Result<()> {
-        err!(SolduelError::NotImplemented)
+    pub fn quick_play(ctx: Context<QuickPlay>, game: u8, tier: u8) -> Result<()> {
+        room::handle_quick_play(ctx, game, tier)
     }
 
-    pub fn cancel_room(_ctx: Context<CancelRoom>) -> Result<()> {
-        err!(SolduelError::NotImplemented)
+    pub fn cancel_room(ctx: Context<CancelRoom>) -> Result<()> {
+        room::handle_cancel_room(ctx)
     }
 
-    pub fn game_action(_ctx: Context<GameAction>, _data: Vec<u8>) -> Result<()> {
-        err!(SolduelError::NotImplemented)
+    pub fn game_action(ctx: Context<GameAction>, data: Vec<u8>) -> Result<()> {
+        room::handle_game_action(ctx, data)
     }
 
-    pub fn claim_timeout(_ctx: Context<ClaimTimeout>) -> Result<()> {
-        err!(SolduelError::NotImplemented)
+    pub fn claim_timeout(ctx: Context<ClaimTimeout>) -> Result<()> {
+        room::handle_claim_timeout(ctx)
     }
 
-    pub fn mint_badge(_ctx: Context<MintBadge>, _badge: u8) -> Result<()> {
-        err!(SolduelError::NotImplemented)
+    pub fn mint_badge(ctx: Context<MintBadge>, badge: u8) -> Result<()> {
+        badges::handle_mint_badge(ctx, badge)
     }
 }
 
