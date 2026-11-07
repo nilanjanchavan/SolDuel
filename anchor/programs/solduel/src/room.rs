@@ -524,61 +524,14 @@ pub fn handle_quick_play(ctx: Context<QuickPlay>, game: u8, tier: u8) -> Result<
     }
 
     // Create room account if not exists (handling prefunded accounts safely)
-    let rent = Rent::get()?;
-    let required_room_lamports = rent.minimum_balance(MatchRoom::LEN);
-    if room_info.lamports() == 0 {
-        let create_ix = anchor_lang::solana_program::system_instruction::create_account(
-            &player_info.key(),
-            &room_info.key(),
-            required_room_lamports,
-            MatchRoom::LEN as u64,
-            ctx.program_id,
-        );
-        anchor_lang::solana_program::program::invoke_signed(
-            &create_ix,
-            &[
-                player_info.to_account_info(),
-                room_info.to_account_info(),
-                system_program.to_account_info(),
-            ],
-            &[&[ROOM_SEED, player_info.key().as_ref(), &[room_bump]]],
-        )?;
-    } else {
-        if room_info.lamports() < required_room_lamports {
-            let diff = required_room_lamports - room_info.lamports();
-            let transfer_ix = anchor_lang::solana_program::system_instruction::transfer(
-                &player_info.key(),
-                &room_info.key(),
-                diff,
-            );
-            anchor_lang::solana_program::program::invoke(
-                &transfer_ix,
-                &[
-                    player_info.to_account_info(),
-                    room_info.to_account_info(),
-                    system_program.to_account_info(),
-                ],
-            )?;
-        }
-        let allocate_ix = anchor_lang::solana_program::system_instruction::allocate(
-            &room_info.key(),
-            MatchRoom::LEN as u64,
-        );
-        anchor_lang::solana_program::program::invoke_signed(
-            &allocate_ix,
-            &[room_info.to_account_info(), system_program.to_account_info()],
-            &[&[ROOM_SEED, player_info.key().as_ref(), &[room_bump]]],
-        )?;
-        let assign_ix = anchor_lang::solana_program::system_instruction::assign(
-            &room_info.key(),
-            ctx.program_id,
-        );
-        anchor_lang::solana_program::program::invoke_signed(
-            &assign_ix,
-            &[room_info.to_account_info(), system_program.to_account_info()],
-            &[&[ROOM_SEED, player_info.key().as_ref(), &[room_bump]]],
-        )?;
-    }
+    init_or_allocate_pda_account(
+        player_info,
+        room_info,
+        system_program,
+        ctx.program_id,
+        MatchRoom::LEN,
+        &[ROOM_SEED, player_info.key.as_ref(), &[room_bump]],
+    )?;
 
     // Transfer stake to room
     let transfer_ix = anchor_lang::solana_program::system_instruction::transfer(
@@ -619,68 +572,14 @@ pub fn handle_quick_play(ctx: Context<QuickPlay>, game: u8, tier: u8) -> Result<
 
     // Create waiting spot if empty (handling prefunded accounts safely)
     if waiting_spot_info.data_is_empty() {
-        let rent = Rent::get()?;
-        let required_spot_lamports = rent.minimum_balance(WaitingSpot::LEN);
-        if waiting_spot_info.lamports() == 0 {
-            let create_spot_ix =
-                anchor_lang::solana_program::system_instruction::create_account(
-                    &player_info.key(),
-                    &waiting_spot_info.key(),
-                    required_spot_lamports,
-                    WaitingSpot::LEN as u64,
-                    ctx.program_id,
-                );
-            anchor_lang::solana_program::program::invoke_signed(
-                &create_spot_ix,
-                &[
-                    player_info.to_account_info(),
-                    waiting_spot_info.to_account_info(),
-                    system_program.to_account_info(),
-                ],
-                &[&[WAITING_SPOT_SEED, &[game], &[tier], &[spot_bump]]],
-            )?;
-        } else {
-            if waiting_spot_info.lamports() < required_spot_lamports {
-                let diff = required_spot_lamports - waiting_spot_info.lamports();
-                let transfer_ix = anchor_lang::solana_program::system_instruction::transfer(
-                    &player_info.key(),
-                    &waiting_spot_info.key(),
-                    diff,
-                );
-                anchor_lang::solana_program::program::invoke(
-                    &transfer_ix,
-                    &[
-                        player_info.to_account_info(),
-                        waiting_spot_info.to_account_info(),
-                        system_program.to_account_info(),
-                    ],
-                )?;
-            }
-            let allocate_ix = anchor_lang::solana_program::system_instruction::allocate(
-                &waiting_spot_info.key(),
-                WaitingSpot::LEN as u64,
-            );
-            anchor_lang::solana_program::program::invoke_signed(
-                &allocate_ix,
-                &[
-                    waiting_spot_info.to_account_info(),
-                    system_program.to_account_info(),
-                ],
-                &[&[WAITING_SPOT_SEED, &[game], &[tier], &[spot_bump]]],
-            )?;
-            let assign_ix = anchor_lang::solana_program::system_instruction::assign(
-                &waiting_spot_info.key(),
-                ctx.program_id,
-            );
-            anchor_lang::solana_program::program::invoke_signed(
-                &assign_ix,
-                &[
-                    waiting_spot_info.to_account_info(),
-                    system_program.to_account_info(),
-                ],
-                &[&[WAITING_SPOT_SEED, &[game], &[tier], &[spot_bump]]],
-            )?;
-        }
+        init_or_allocate_pda_account(
+            player_info,
+            waiting_spot_info,
+            system_program,
+            ctx.program_id,
+            WaitingSpot::LEN,
+            &[WAITING_SPOT_SEED, &[game], &[tier], &[spot_bump]],
+        )?;
     }
 
     // Write to waiting spot
@@ -951,6 +850,79 @@ pub fn finish_room(
     // Close room account by assigning to system program and resizing to 0 so PDA address can be reused
     room_info.assign(&anchor_lang::system_program::ID);
     room_info.resize(0)?;
+
+    Ok(())
+}
+
+/// Initializes or allocates and assigns a PDA account, handling pre-funded lamports safely.
+///
+/// If the account has zero lamports, it is created directly with system instruction `create_account`.
+/// If the account is pre-funded, it is topped up to the minimum rent-exempt balance if necessary,
+/// then allocated to the target space and assigned to the program id using the provided signer seeds.
+fn init_or_allocate_pda_account<'info>(
+    payer: &AccountInfo<'info>,
+    target_account: &AccountInfo<'info>,
+    system_program: &AccountInfo<'info>,
+    program_id: &Pubkey,
+    space: usize,
+    signer_seeds: &[&[u8]],
+) -> Result<()> {
+    let rent = Rent::get()?;
+    let required_lamports = rent.minimum_balance(space);
+
+    if target_account.lamports() == 0 {
+        let create_ix = anchor_lang::solana_program::system_instruction::create_account(
+            payer.key,
+            target_account.key,
+            required_lamports,
+            space as u64,
+            program_id,
+        );
+        anchor_lang::solana_program::program::invoke_signed(
+            &create_ix,
+            &[
+                payer.clone(),
+                target_account.clone(),
+                system_program.clone(),
+            ],
+            &[signer_seeds],
+        )?;
+    } else {
+        if target_account.lamports() < required_lamports {
+            let diff = required_lamports - target_account.lamports();
+            let transfer_ix = anchor_lang::solana_program::system_instruction::transfer(
+                payer.key,
+                target_account.key,
+                diff,
+            );
+            anchor_lang::solana_program::program::invoke(
+                &transfer_ix,
+                &[
+                    payer.clone(),
+                    target_account.clone(),
+                    system_program.clone(),
+                ],
+            )?;
+        }
+        let allocate_ix = anchor_lang::solana_program::system_instruction::allocate(
+            target_account.key,
+            space as u64,
+        );
+        anchor_lang::solana_program::program::invoke_signed(
+            &allocate_ix,
+            &[target_account.clone(), system_program.clone()],
+            &[signer_seeds],
+        )?;
+        let assign_ix = anchor_lang::solana_program::system_instruction::assign(
+            target_account.key,
+            program_id,
+        );
+        anchor_lang::solana_program::program::invoke_signed(
+            &assign_ix,
+            &[target_account.clone(), system_program.clone()],
+            &[signer_seeds],
+        )?;
+    }
 
     Ok(())
 }

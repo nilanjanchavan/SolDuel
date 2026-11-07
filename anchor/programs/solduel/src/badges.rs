@@ -68,42 +68,71 @@ pub fn handle_mint_badge<'info>(
     let player_info = ctx.accounts.player.to_account_info();
     let profile_info = ctx.accounts.profile.to_account_info();
     let sys_info = ctx.accounts.system_program.to_account_info();
-    let profile_key = profile_info.key();
 
-    #[cfg(target_os = "solana")]
+    mint_core_nft_cpi(
+        asset_info,
+        mpl_core_program,
+        &player_info,
+        &profile_info,
+        &sys_info,
+        badge,
+    )?;
+
+    // Only update profile after CPI successfully completes
+    ctx.accounts.profile.badges |= minted_flag;
+
+    Ok(())
+}
+
+/// Invokes the Metaplex Core CreateV1 CPI to mint a non-transferable badge NFT.
+#[cfg(target_os = "solana")]
+fn mint_core_nft_cpi<'info>(
+    asset_info: &AccountInfo<'info>,
+    mpl_core_program: &AccountInfo<'info>,
+    player_info: &AccountInfo<'info>,
+    profile_info: &AccountInfo<'info>,
+    sys_info: &AccountInfo<'info>,
+    badge: u8,
+) -> Result<()> {
+    let profile_key = profile_info.key();
     CreateV1CpiBuilder::new(mpl_core_program)
         .asset(asset_info)
-        .payer(&player_info)
-        .owner(Some(&player_info))
-        .update_authority(Some(&profile_info))
-        .system_program(&sys_info)
+        .payer(player_info)
+        .owner(Some(player_info))
+        .update_authority(Some(profile_info))
+        .system_program(sys_info)
         .name(badge_name(badge))
         .uri(badge_uri(badge))
         .plugins(vec![PluginAuthorityPair {
             plugin: Plugin::PermanentFreezeDelegate(PermanentFreezeDelegate { frozen: true }),
             authority: Some(PluginAuthority::Address { address: profile_key }),
         }])
-        .invoke()?;
+        .invoke()
+        .map_err(Into::into)
+}
 
-    #[cfg(all(not(target_os = "solana"), any(test, feature = "test-game")))]
-    {
-        let _ = (
-            &player_info,
-            &profile_info,
-            &sys_info,
-            &profile_key,
-            asset_info,
-            mpl_core_program,
-        );
-    }
-
-    #[cfg(all(not(target_os = "solana"), not(any(test, feature = "test-game"))))]
-    {
-        return err!(SolduelError::InvalidBadge);
-    }
-
-    // Only update profile after CPI successfully completes
-    ctx.accounts.profile.badges |= minted_flag;
-
+/// Test/mock variant for off-chain tests that bypasses CPI execution.
+#[cfg(all(not(target_os = "solana"), any(test, feature = "test-game")))]
+fn mint_core_nft_cpi<'info>(
+    _asset_info: &AccountInfo<'info>,
+    _mpl_core_program: &AccountInfo<'info>,
+    _player_info: &AccountInfo<'info>,
+    _profile_info: &AccountInfo<'info>,
+    _sys_info: &AccountInfo<'info>,
+    _badge: u8,
+) -> Result<()> {
     Ok(())
+}
+
+/// Fallback for non-Solana environments outside tests.
+#[cfg(all(not(target_os = "solana"), not(any(test, feature = "test-game"))))]
+fn mint_core_nft_cpi<'info>(
+    _asset_info: &AccountInfo<'info>,
+    _mpl_core_program: &AccountInfo<'info>,
+    _player_info: &AccountInfo<'info>,
+    _profile_info: &AccountInfo<'info>,
+    _sys_info: &AccountInfo<'info>,
+    _badge: u8,
+) -> Result<()> {
+    err!(SolduelError::InvalidBadge)
 }
