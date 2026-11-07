@@ -420,13 +420,17 @@ export default function RoomPage({
             )}
 
             {/* Game Board Display */}
-            {registered && registered.ui && myPlayerIdx >= 0 ? (
+            {registered && registered.ui ? (
               <div className="p-4 bg-neutral-50 dark:bg-neutral-950 rounded-xl border border-neutral-200 dark:border-neutral-800">
                 <registered.ui.Board
                   state={registered.engine.decodeState(new Uint8Array(room.state))}
-                  me={myPlayerIdx as 0 | 1}
-                  onMove={(m) => handleGameAction(registered.engine.encodeAction(m))}
-                  disabled={isSubmittingMove}
+                  me={myPlayerIdx >= 0 ? (myPlayerIdx as 0 | 1) : 0}
+                  onMove={(m) => {
+                    if (myPlayerIdx >= 0) {
+                      handleGameAction(registered.engine.encodeAction(m));
+                    }
+                  }}
+                  disabled={isSubmittingMove || myPlayerIdx < 0}
                 />
               </div>
             ) : (

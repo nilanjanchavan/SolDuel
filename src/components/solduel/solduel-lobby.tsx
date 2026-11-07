@@ -15,7 +15,11 @@ import {
   getProfilePda,
   getWaitingSpotPda,
 } from './solduel-data-access';
-import { STAKE_TIERS_COINS, LAMPORTS_PER_COIN } from '@/config';
+import {
+  STAKE_TIERS_COINS,
+  LAMPORTS_PER_COIN,
+  QUICK_PLAY_EXPIRY_SECS,
+} from '@/config';
 import { Swords, Zap, Plus, Users, Shield, Copy, Check } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -48,22 +52,64 @@ export function SolduelLobby() {
       const [myRoomPda] = getRoomPda(wallet.publicKey);
       const [myProfilePda] = getProfilePda(wallet.publicKey);
 
-      // Fetch waiting spot info to see if a room is already queued
+      // Check waiting spot info to see if an opponent is already queued or spot is expired
       let targetRoom = myRoomPda;
+      const remainingAccounts: { pubkey: PublicKey; isWritable: boolean; isSigner: boolean }[] = [];
+
       try {
         const spotAccountInfo = await program.provider.connection.getAccountInfo(waitingSpotPda);
-        if (spotAccountInfo && spotAccountInfo.data.length >= 40) {
+        if (spotAccountInfo && spotAccountInfo.data.length >= 48) {
           const roomInSpot = new PublicKey(spotAccountInfo.data.slice(8, 40));
-          if (!roomInSpot.equals(PublicKey.default) && !roomInSpot.equals(myRoomPda)) {
-            targetRoom = roomInSpot;
+          if (!roomInSpot.equals(PublicKey.default)) {
+            const createdTs = Number(spotAccountInfo.data.readBigInt64LE(40));
+            const now = Math.floor(Date.now() / 1000);
+            const isExpired = now - createdTs > QUICK_PLAY_EXPIRY_SECS;
+
+            if (isExpired) {
+              // Spot has expired: caller reclaims the spot by creating myRoomPda
+              // and passes the expired room, creator, and profile for cleanup & refund
+              targetRoom = myRoomPda;
+              remainingAccounts.push({
+                pubkey: roomInSpot,
+                isWritable: true,
+                isSigner: false,
+              });
+
+              try {
+                const oldRoomAcc = await (program.account as any).matchRoom.fetchNullable(roomInSpot);
+                if (oldRoomAcc && oldRoomAcc.creator) {
+                  const oldCreator = oldRoomAcc.creator as PublicKey;
+                  const [oldProfilePda] = getProfilePda(oldCreator);
+                  remainingAccounts.push({
+                    pubkey: oldCreator,
+                    isWritable: true,
+                    isSigner: false,
+                  });
+                  remainingAccounts.push({
+                    pubkey: oldProfilePda,
+                    isWritable: true,
+                    isSigner: false,
+                  });
+                }
+              } catch (fetchErr) {
+                console.warn('Could not fetch old room for creator cleanup:', fetchErr);
+              }
+            } else if (roomInSpot.equals(myRoomPda)) {
+              toast.info('You already have an open waiting room in this Quick Play queue.');
+              router.push(`/room/${myRoomPda.toBase58()}`);
+              return;
+            } else {
+              // Valid unexpired room queued by an opponent: join it
+              targetRoom = roomInSpot;
+            }
           }
         }
       } catch (err) {
-        console.warn('Waiting spot fetch error (may be empty):', err);
+        console.warn('Waiting spot fetch error (may be empty or uninitialized):', err);
       }
 
       toast.info('Joining or matching in Quick Play...');
-      const tx = await (program.methods as any)
+      let methodBuilder = (program.methods as any)
         .quickPlay(selectedGame, selectedTier)
         .accounts({
           waitingSpot: waitingSpotPda,
@@ -71,8 +117,13 @@ export function SolduelLobby() {
           profile: myProfilePda,
           player: wallet.publicKey,
           systemProgram: SystemProgram.programId,
-        })
-        .rpc();
+        });
+
+      if (remainingAccounts.length > 0) {
+        methodBuilder = methodBuilder.remainingAccounts(remainingAccounts);
+      }
+
+      await methodBuilder.rpc();
 
       toast.success('Quick Play match registered!');
       router.push(`/room/${targetRoom.toBase58()}`);

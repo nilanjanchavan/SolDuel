@@ -36,10 +36,15 @@ export function GetTestSolButton() {
       toast.info('Requesting 1 test SOL on devnet...');
       const sig = await connection.requestAirdrop(publicKey, LAMPORTS_PER_SOL);
       const latestBlockhash = await connection.getLatestBlockhash();
-      await connection.confirmTransaction({
+      const confirmation = await connection.confirmTransaction({
         signature: sig,
         ...latestBlockhash,
       });
+      if (confirmation.value.err !== null) {
+        throw new Error(
+          `Transaction confirmation failed: ${JSON.stringify(confirmation.value.err)}`
+        );
+      }
       toast.success('Received 1 Devnet SOL!');
       queryClient.invalidateQueries({ queryKey: ['wallet-balance'] });
     } catch (err: unknown) {

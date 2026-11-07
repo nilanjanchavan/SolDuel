@@ -36,7 +36,55 @@ export const rpsEngine: GameEngine<RpsState, RpsMove> = {
 
 export const rpsUI: GameUI<RpsState, RpsMove> = {
   Board({ state, me, onMove, disabled }) {
-    return React.createElement('div', { className: 'rps-board' }, 'Rock Paper Scissors Board Stub');
+    const choices = [
+      { id: 0 as const, label: '✊ Rock' },
+      { id: 1 as const, label: '✋ Paper' },
+      { id: 2 as const, label: '✌️ Scissors' },
+    ];
+
+    return React.createElement(
+      'div',
+      { className: 'space-y-4 text-center' },
+      React.createElement(
+        'div',
+        { className: 'flex items-center justify-between text-xs text-neutral-500 font-mono' },
+        React.createElement('span', null, `You: Player ${me + 1}`),
+        React.createElement(
+          'span',
+          null,
+          `Round ${state.round + 1} (Score: ${state.scores[0]} - ${state.scores[1]})`
+        )
+      ),
+      React.createElement(
+        'p',
+        { className: 'text-xs text-neutral-500 font-mono' },
+        disabled ? 'Board inactive' : 'Choose your move:'
+      ),
+      React.createElement(
+        'div',
+        { className: 'flex justify-center gap-3' },
+        ...choices.map((c) =>
+          React.createElement(
+            'button',
+            {
+              key: c.id,
+              type: 'button',
+              disabled,
+              onClick: () => {
+                const secret = new Uint8Array(32);
+                if (typeof window !== 'undefined' && window.crypto) {
+                  window.crypto.getRandomValues(secret);
+                }
+                onMove({ choice: c.id, secret });
+              },
+              className:
+                'px-4 py-2.5 bg-neutral-200 dark:bg-neutral-800 hover:bg-purple-600 hover:text-white rounded-xl text-sm font-semibold disabled:opacity-50 transition',
+            },
+            c.label
+          )
+        )
+      )
+    );
   },
 };
 
