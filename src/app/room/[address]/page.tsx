@@ -51,7 +51,7 @@ export default function RoomPage({
   const address = resolvedParams.address;
   const router = useRouter();
   const { program, wallet, connection } = useSolduelProgram();
-  const { room, isLoading, refetch, roomPubkey } = useRoomAccount(address);
+  const { room, isLoading, isError, isAccountClosed, refetch, roomPubkey } = useRoomAccount(address);
 
   type RoomAccount = NonNullable<ReturnType<typeof useRoomAccount>['room']>;
   const [retainedRoom, setRetainedRoom] = useState<RoomAccount | null>(null);
@@ -270,13 +270,21 @@ export default function RoomPage({
   }
 
   // Parse room status
-  const statusKey = currentRoom
+  const rawStatus = currentRoom
     ? Object.keys(currentRoom.status)[0]?.toLowerCase() || 'open'
     : 'open';
 
-  // If the room account is missing or closed without an authoritative terminal state,
+  // Authoritatively transition closed rooms to their final terminal states
+  const statusKey =
+    isAccountClosed && rawStatus === 'active'
+      ? 'finished'
+      : isAccountClosed && rawStatus === 'open'
+      ? 'cancelled'
+      : rawStatus;
+
+  // If the room account was never found or closed without a match snapshot,
   // display the not-found / closed screen.
-  if (!currentRoom || (!room && statusKey !== 'finished' && statusKey !== 'cancelled')) {
+  if (!currentRoom) {
     return (
       <div className="max-w-xl mx-auto py-12 text-center space-y-4">
         <AlertTriangle className="h-12 w-12 text-amber-500 mx-auto" />
@@ -306,19 +314,29 @@ export default function RoomPage({
     nowTs >= deadlineVal + TIMEOUT_GRACE_SECS;
 
   // Registered game engine/ui
-  const registered = getGame(currentRoom.game as GameKind);
+  const registered =
+    currentRoom.game >= 0 && currentRoom.game <= 3
+      ? getGame(currentRoom.game as GameKind)
+      : undefined;
 
   return (
     <div className="max-w-3xl mx-auto space-y-6 py-4">
       {/* Top Bar Navigation */}
       <div className="flex justify-between items-center">
-        <Link
-          href="/"
-          className="text-sm flex items-center gap-1.5 text-neutral-500 hover:text-neutral-900 dark:hover:text-white transition"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          Back to Lobby
-        </Link>
+        <div className="flex items-center gap-3">
+          <Link
+            href="/"
+            className="text-sm flex items-center gap-1.5 text-neutral-500 hover:text-neutral-900 dark:hover:text-white transition"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Back to Lobby
+          </Link>
+          {isError && currentRoom && (
+            <span className="text-xs bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 px-2.5 py-0.5 rounded-full font-medium animate-pulse">
+              Reconnecting to network...
+            </span>
+          )}
+        </div>
         <GetTestSolButton />
       </div>
 
