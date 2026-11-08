@@ -10,9 +10,16 @@ export interface WordChainBoardProps {
   me: 0 | 1
   onMove: (m: WordChainMove) => void
   disabled: boolean
+  onTimeout?: (player: 0 | 1) => void
 }
 
-export const WordChainBoard: React.FC<WordChainBoardProps> = ({ state, me, onMove, disabled }) => {
+export const WordChainBoard: React.FC<WordChainBoardProps> = ({
+  state,
+  me,
+  onMove,
+  disabled,
+  onTimeout,
+}) => {
   const [inputWord, setInputWord] = useState('')
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const [lastStrikeWord, setLastStrikeWord] = useState<string | null>(null)
@@ -20,20 +27,17 @@ export const WordChainBoard: React.FC<WordChainBoardProps> = ({ state, me, onMov
   const [nowTs, setNowTs] = useState(() => Date.now())
   const abortControllerRef = useRef<AbortController | null>(null)
 
-  const isMyTurn = state.currentTurn === me && !disabled
-  const reqPrefix = useMemo(() => getRequiredPrefix(state.lastWord), [state.lastWord])
-
-  // Preload full dictionary in browser environments
-  useEffect(() => {
-    loadDictionaryAsync().catch(() => {})
-  }, [])
-
   // Active 1-second interval to update remaining time
   useEffect(() => {
     const timer = setInterval(() => {
       setNowTs(Date.now())
     }, 500)
     return () => clearInterval(timer)
+  }, [])
+
+  // Preload full dictionary in browser environments
+  useEffect(() => {
+    loadDictionaryAsync().catch(() => {})
   }, [])
 
   // Cleanup pending fetch on unmount
@@ -50,10 +54,20 @@ export const WordChainBoard: React.FC<WordChainBoardProps> = ({ state, me, onMov
   const remainingSecs = Math.max(0, WORD_CHAIN_TIMEOUT_SECS - elapsedSecs)
   const timerRatio = Math.max(0, Math.min(1, remainingSecs / WORD_CHAIN_TIMEOUT_SECS))
 
+  const isMyTurn = state.currentTurn === me && !disabled && remainingSecs > 0
+  const reqPrefix = useMemo(() => getRequiredPrefix(state.lastWord), [state.lastWord])
+
+  // Automatically notify parent on timeout expiration
+  useEffect(() => {
+    if (remainingSecs <= 0 && !disabled) {
+      onTimeout?.(state.currentTurn)
+    }
+  }, [remainingSecs, disabled, onTimeout, state.currentTurn])
+
   const handleSubmit = useCallback(
     async (e?: React.FormEvent) => {
       if (e) e.preventDefault()
-      if (!isMyTurn || isLookingUpProof) return
+      if (!isMyTurn || isLookingUpProof || remainingSecs <= 0) return
 
       const cleaned = inputWord.trim().toLowerCase()
       if (!cleaned) return
@@ -102,13 +116,11 @@ export const WordChainBoard: React.FC<WordChainBoardProps> = ({ state, me, onMov
         }
         // Fallback for offline/unit test environments
       } finally {
-        if (!controller.signal.aborted) {
-          setIsLookingUpProof(false)
-        }
+        setIsLookingUpProof(false)
       }
 
-      // Re-verify that it is still this player's turn and component is active
-      if (controller.signal.aborted || state.currentTurn !== me || disabled) {
+      // Re-verify that it is still this player's turn, not timed out, and component is active
+      if (controller.signal.aborted || state.currentTurn !== me || disabled || remainingSecs <= 0) {
         return
       }
 
@@ -132,7 +144,7 @@ export const WordChainBoard: React.FC<WordChainBoardProps> = ({ state, me, onMov
       setLastStrikeWord(cleaned)
       onMove({ word: cleaned, proof: [] })
     },
-    [inputWord, isMyTurn, isLookingUpProof, reqPrefix, onMove, state.currentTurn, me, disabled],
+    [inputWord, isMyTurn, isLookingUpProof, remainingSecs, reqPrefix, onMove, state.currentTurn, me, disabled],
   )
 
   return (
@@ -162,10 +174,12 @@ export const WordChainBoard: React.FC<WordChainBoardProps> = ({ state, me, onMov
           role="timer"
           aria-label={`Time remaining: ${remainingSecs} seconds`}
           aria-live="polite"
-          className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border ${
-            remainingSecs <= 5 && isMyTurn
-              ? 'bg-rose-500/20 border-rose-500/40 text-rose-300 motion-safe:animate-pulse'
-              : 'bg-slate-800/80 border-slate-700/80 text-slate-200'
+          className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border transition-all ${
+            remainingSecs <= 0
+              ? 'bg-rose-950/80 border-rose-500 text-rose-300 shadow-md shadow-rose-950/50 motion-safe:animate-pulse'
+              : remainingSecs <= 5 && state.currentTurn === me
+                ? 'bg-rose-500/20 border-rose-500/40 text-rose-300 motion-safe:animate-pulse'
+                : 'bg-slate-800/80 border-slate-700/80 text-slate-200'
           }`}
         >
           <div className="w-5 h-5 relative flex items-center justify-center">
@@ -185,7 +199,13 @@ export const WordChainBoard: React.FC<WordChainBoardProps> = ({ state, me, onMov
                 r="10"
                 stroke="currentColor"
                 strokeWidth="2.5"
-                className={remainingSecs <= 5 ? 'text-rose-400 transition-all' : 'text-amber-400 transition-all'}
+                className={
+                  remainingSecs <= 0
+                    ? 'text-rose-500 transition-all'
+                    : remainingSecs <= 5
+                      ? 'text-rose-400 transition-all'
+                      : 'text-amber-400 transition-all'
+                }
                 fill="none"
                 strokeDasharray={2 * Math.PI * 10}
                 strokeDashoffset={2 * Math.PI * 10 * (1 - timerRatio)}
@@ -193,7 +213,9 @@ export const WordChainBoard: React.FC<WordChainBoardProps> = ({ state, me, onMov
               />
             </svg>
           </div>
-          <span className="font-mono text-sm font-semibold tabular-nums">{remainingSecs}s</span>
+          <span className="font-mono text-sm font-bold tabular-nums">
+            {remainingSecs <= 0 ? '0s (TIME UP)' : `${remainingSecs}s`}
+          </span>
         </div>
       </div>
 
@@ -267,7 +289,7 @@ export const WordChainBoard: React.FC<WordChainBoardProps> = ({ state, me, onMov
       </div>
 
       {/* Strike Alert Banner */}
-      {lastStrikeWord && state.strikes[me] > 0 && (
+      {lastStrikeWord && state.strikes[me] > 0 && remainingSecs > 0 && (
         <div className="p-3.5 rounded-xl bg-rose-950/60 border border-rose-500/60 text-rose-200 text-xs font-mono flex items-center justify-between shadow-lg shadow-rose-950/30 motion-safe:animate-pulse">
           <div className="flex items-center gap-2">
             <span className="text-base">⚠️</span>
@@ -282,6 +304,22 @@ export const WordChainBoard: React.FC<WordChainBoardProps> = ({ state, me, onMov
         </div>
       )}
 
+      {/* Time Expired Notice */}
+      {remainingSecs <= 0 && state.currentTurn === me && (
+        <div className="p-3.5 rounded-xl bg-rose-950/70 border border-rose-500 text-rose-200 text-xs font-mono flex items-center justify-between shadow-lg shadow-rose-950/40 motion-safe:animate-pulse">
+          <div className="flex items-center gap-2">
+            <span className="text-base">⏱️</span>
+            <div>
+              <span className="font-bold text-rose-400">TIME EXPIRED: </span>
+              <span>The 30-second turn limit has elapsed. Match lost by timeout!</span>
+            </div>
+          </div>
+          <span className="font-bold text-rose-300 text-[11px] bg-rose-900/60 px-2.5 py-1 rounded-lg border border-rose-700/50">
+            0s REMAINING
+          </span>
+        </div>
+      )}
+
       {/* Interactive Word Input Form */}
       <form onSubmit={handleSubmit} className="space-y-3">
         <div className="flex gap-2">
@@ -292,8 +330,14 @@ export const WordChainBoard: React.FC<WordChainBoardProps> = ({ state, me, onMov
               setInputWord(e.target.value.toLowerCase())
               if (errorMsg) setErrorMsg(null)
             }}
-            placeholder={reqPrefix ? `Type a word starting with "${reqPrefix}"...` : 'Type your opening word...'}
-            disabled={!isMyTurn || isLookingUpProof}
+            placeholder={
+              remainingSecs <= 0
+                ? 'Time expired (turn timed out)...'
+                : reqPrefix
+                  ? `Type a word starting with "${reqPrefix}"...`
+                  : 'Type your opening word...'
+            }
+            disabled={!isMyTurn || isLookingUpProof || remainingSecs <= 0}
             className="flex-1 bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-white font-mono placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-amber-500 disabled:opacity-50 disabled:cursor-not-allowed transition"
             autoComplete="off"
             autoCapitalize="none"
@@ -301,7 +345,7 @@ export const WordChainBoard: React.FC<WordChainBoardProps> = ({ state, me, onMov
           />
           <button
             type="submit"
-            disabled={!isMyTurn || !inputWord.trim() || isLookingUpProof}
+            disabled={!isMyTurn || !inputWord.trim() || isLookingUpProof || remainingSecs <= 0}
             className="px-5 py-2.5 rounded-xl font-semibold bg-amber-500 hover:bg-amber-400 active:bg-amber-600 text-slate-950 disabled:opacity-40 disabled:cursor-not-allowed transition shadow-md shadow-amber-500/20 flex items-center justify-center min-w-[100px]"
           >
             {isLookingUpProof ? (

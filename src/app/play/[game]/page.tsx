@@ -84,8 +84,45 @@ function PracticeMatch({ gameRecord, gameInfo, difficulty, onRematch }: Practice
 
   const [gameState, setGameState] = useState<unknown>(() => engine.init(0))
   const [outcome, setOutcome] = useState<Outcome>('continue')
+  const [endReason, setEndReason] = useState<'normal' | 'timeout' | null>(null)
   const [botError, setBotError] = useState<string | null>(null)
   const [botRetryCount, setBotRetryCount] = useState(0)
+
+  // Handle player or bot timeout
+  const handleTimeout = useCallback(
+    (timedOutPlayer: 0 | 1) => {
+      if (outcome !== 'continue') return
+      const winner = (1 - timedOutPlayer) as 0 | 1
+      setOutcome({ win: winner })
+      setEndReason('timeout')
+    },
+    [outcome],
+  )
+
+  // Turn timeout watcher for games with turnStartTs (Word Chain 30s limit)
+  useEffect(() => {
+    if (outcome !== 'continue' || !gameState || typeof gameState !== 'object') return
+    const s = gameState as Record<string, unknown>
+    if (!('turnStartTs' in s) || typeof s.turnStartTs !== 'number' || s.turnStartTs <= 0) return
+
+    const turnStart = s.turnStartTs < 1e11 ? s.turnStartTs * 1000 : s.turnStartTs
+    const timeoutMs = 30_000
+
+    const checkTimeout = () => {
+      const now = Date.now()
+      if (now - turnStart >= timeoutMs) {
+        const timedOutPlayer = typeof s.currentTurn === 'number' ? (s.currentTurn as 0 | 1) : 0
+        setOutcome({ win: (1 - timedOutPlayer) as 0 | 1 })
+        setEndReason('timeout')
+      }
+    }
+
+    const elapsed = Date.now() - turnStart
+    const remainingMs = Math.max(0, timeoutMs - elapsed)
+
+    const timer = setTimeout(checkTimeout, remainingMs)
+    return () => clearTimeout(timer)
+  }, [gameState, outcome])
 
   // Check if it is currently the bot's turn to act
   const isBotThinking = useMemo(() => {
@@ -115,6 +152,9 @@ function PracticeMatch({ gameRecord, gameInfo, difficulty, onRematch }: Practice
         const res = engine.apply(gameState as never, 0, move as never)
         setGameState(res.state)
         setOutcome(res.outcome)
+        if (res.outcome !== 'continue') {
+          setEndReason('normal')
+        }
         setBotError(null)
       } catch (err) {
         console.error('Failed to apply human move:', err)
@@ -134,6 +174,9 @@ function PracticeMatch({ gameRecord, gameInfo, difficulty, onRematch }: Practice
         const res = engine.apply(gameState as never, 1, botMove as never)
         setGameState(res.state)
         setOutcome(res.outcome)
+        if (res.outcome !== 'continue') {
+          setEndReason('normal')
+        }
         setBotError(null)
       } catch (err) {
         console.error('Failed to apply bot move:', err)
@@ -162,15 +205,27 @@ function PracticeMatch({ gameRecord, gameInfo, difficulty, onRematch }: Practice
                 : 'bg-rose-950/40 border-rose-500/50 text-rose-200 shadow-rose-950/50'
           }`}
         >
-          <div className="text-3xl mb-2">{outcome === 'draw' ? '🤝' : outcome.win === 0 ? '🏆' : '💀'}</div>
+          <div className="text-3xl mb-2">
+            {outcome === 'draw' ? '🤝' : endReason === 'timeout' ? '⏱️' : outcome.win === 0 ? '🏆' : '💀'}
+          </div>
           <h3 className="text-xl font-bold tracking-tight">
             {outcome === 'draw'
               ? 'Match Ended in a Draw!'
-              : outcome.win === 0
-                ? `Victory! You defeated the ${difficulty} bot!`
-                : `Defeat! The ${difficulty} bot won the duel.`}
+              : endReason === 'timeout'
+                ? outcome.win === 0
+                  ? `Victory! The ${difficulty} bot timed out!`
+                  : `Defeat! You ran out of time (30s limit)!`
+                : outcome.win === 0
+                  ? `Victory! You defeated the ${difficulty} bot!`
+                  : `Defeat! The ${difficulty} bot won the duel.`}
           </h3>
-          <p className="text-xs text-slate-400 mt-1 mb-4">Practice matches never impact your wallet or leaderboards.</p>
+          <p className="text-xs text-slate-400 mt-1 mb-4">
+            {endReason === 'timeout' && outcome !== 'draw'
+              ? outcome.win === 0
+                ? 'The opponent failed to play a word within 30 seconds. You win by timeout!'
+                : 'Turns in Word Chain must be completed within 30 seconds. You forfeited by timeout.'
+              : 'Practice matches never impact your wallet or leaderboards.'}
+          </p>
           <div className="flex justify-center gap-3">
             <button
               type="button"
@@ -226,6 +281,7 @@ function PracticeMatch({ gameRecord, gameInfo, difficulty, onRematch }: Practice
           me={0}
           onMove={handleHumanMove}
           disabled={outcome !== 'continue' || isBotThinking}
+          {...({ onTimeout: handleTimeout } as Record<string, unknown>)}
         />
       </div>
     </div>

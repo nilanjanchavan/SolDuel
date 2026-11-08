@@ -55,6 +55,18 @@ describe('Practice Mode Bots and Engines', () => {
         expect(res2.state).toBeDefined()
       }
     })
+
+    it('tracks turn timestamps and respects 30s timeout interval', () => {
+      const state = game.engine.init(0)
+      expect(state.turnStartTs).toBeGreaterThan(0)
+      const now = Date.now()
+      expect(Math.abs(state.turnStartTs - now)).toBeLessThan(5000)
+
+      // Turn advances and refreshes turnStartTs
+      const res1 = game.engine.apply(state, 0, 'dog')
+      expect(res1.state.turnStartTs).toBeGreaterThanOrEqual(state.turnStartTs)
+      expect(res1.state.currentTurn).toBe(1)
+    })
   })
 
   describe('RPS Bot', () => {
