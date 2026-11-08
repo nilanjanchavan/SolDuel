@@ -119,6 +119,16 @@ impl Game for WordChain {
             return err!(SolduelError::NotYourTurn);
         }
 
+        // Verify turn deadline has not elapsed
+        let turn_start_ts = i64::from_le_bytes(
+            state[OFFSET_TURN_START_TS..OFFSET_TURN_START_TS + 8]
+                .try_into()
+                .unwrap(),
+        );
+        if turn_start_ts > 0 && now > turn_start_ts + WORD_CHAIN_TIMEOUT_SECS {
+            return err!(SolduelError::ActionTimedOut);
+        }
+
         // Action payload format:
         // [0]: word_len (u8)
         // [1 .. 1 + word_len]: word (lowercase ASCII)

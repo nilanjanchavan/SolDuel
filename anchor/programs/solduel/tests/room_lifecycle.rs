@@ -165,6 +165,40 @@ fn test_timeouts_and_grace_period() {
 }
 
 #[test]
+fn test_word_chain_strike_does_not_extend_deadline() {
+    let mut state = [0u8; 1024];
+    let start_ts = 1000i64;
+    game_init(1, &mut state, 0, start_ts).unwrap(); // game 1 is WordChain
+
+    let deadline_secs = game_deadline_secs(1, &state).unwrap();
+    assert_eq!(deadline_secs, 30);
+    let original_deadline = start_ts + deadline_secs;
+
+    let prev_laggard = game_laggard(1, &state).unwrap();
+    assert_eq!(prev_laggard, Some(0));
+
+    // Player 0 plays an invalid move (strike) at t = 1010
+    let strike_ts = 1010i64;
+    let outcome = game_apply(1, &mut state, 0, &[], strike_ts).unwrap();
+    assert_eq!(outcome, Outcome::Continue);
+
+    let curr_laggard = game_laggard(1, &state).unwrap();
+    assert_eq!(curr_laggard, Some(0)); // Still player 0's turn
+
+    let is_same_laggard = match (prev_laggard, curr_laggard) {
+        (Some(p1), Some(p2)) => p1 == p2,
+        _ => false,
+    };
+    assert!(is_same_laggard);
+
+    let mut deadline_ts = original_deadline;
+    if !is_same_laggard || deadline_ts == 0 {
+        deadline_ts = strike_ts + deadline_secs;
+    }
+    assert_eq!(deadline_ts, original_deadline, "Deadline must not be extended on strike");
+}
+
+#[test]
 fn test_double_finish_prevention() {
     let room = MatchRoom {
         game: 255,

@@ -679,15 +679,26 @@ pub fn handle_game_action(ctx: Context<GameAction>, data: Vec<u8>) -> Result<()>
         return err!(SolduelError::ActionTimedOut);
     }
 
+    let prev_laggard = game_laggard(room.game, &room.state)?;
     let outcome = game_apply(room.game, &mut room.state, player_idx, &data, now)?;
     room.last_action_ts = now;
 
     match outcome {
         Outcome::Continue => {
-            let deadline_secs = game_deadline_secs(room.game, &room.state)?;
-            room.deadline_ts = now
-                .checked_add(deadline_secs)
-                .ok_or(SolduelError::MathOverflow)?;
+            let curr_laggard = game_laggard(room.game, &room.state)?;
+            // If the same player remains the sole laggard (e.g. Word Chain nonterminal strike),
+            // the deadline remains unchanged so a strike does not extend the turn time.
+            let is_same_laggard = match (prev_laggard, curr_laggard) {
+                (Some(p1), Some(p2)) => p1 == p2,
+                _ => false,
+            };
+
+            if !is_same_laggard || room.deadline_ts == 0 {
+                let deadline_secs = game_deadline_secs(room.game, &room.state)?;
+                room.deadline_ts = now
+                    .checked_add(deadline_secs)
+                    .ok_or(SolduelError::MathOverflow)?;
+            }
         }
         Outcome::Win(winner) => {
             finish_room(&mut ctx.accounts.room, MatchResult::Win(winner), ctx.remaining_accounts)?;
