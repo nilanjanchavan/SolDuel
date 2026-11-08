@@ -44,7 +44,11 @@ function saveSecret(room: Uint8Array | null, round: number, me: number, choice: 
     const saltHex = Array.from(salt)
       .map((b) => b.toString(16).padStart(2, '0'))
       .join('')
-    window.sessionStorage.setItem(getStorageKey(room, round, me), JSON.stringify({ choice, saltHex }))
+    const val = JSON.stringify({ choice, saltHex })
+    window.sessionStorage.setItem(getStorageKey(room, round, me), val)
+    if (room) {
+      window.sessionStorage.setItem(getStorageKey(null, round, me), val)
+    }
   } catch {}
 }
 
@@ -55,7 +59,10 @@ function loadSecret(
 ): { choice: RpsChoice; salt: Uint8Array } | null {
   if (typeof window === 'undefined') return null
   try {
-    const raw = window.sessionStorage.getItem(getStorageKey(room, round, me))
+    let raw = window.sessionStorage.getItem(getStorageKey(room, round, me))
+    if (!raw && room) {
+      raw = window.sessionStorage.getItem(getStorageKey(null, round, me))
+    }
     if (!raw) return null
     const parsed = JSON.parse(raw)
     if (typeof parsed.choice !== 'number' || !Number.isInteger(parsed.choice) || parsed.choice < 0 || parsed.choice > 2) {
@@ -76,6 +83,9 @@ function clearSecret(room: Uint8Array | null, round: number, me: number) {
   if (typeof window === 'undefined') return
   try {
     window.sessionStorage.removeItem(getStorageKey(room, round, me))
+    if (room) {
+      window.sessionStorage.removeItem(getStorageKey(null, round, me))
+    }
   } catch {}
 }
 
@@ -91,6 +101,16 @@ export function RpsBoard({ state, me, onMove, disabled }: RpsBoardProps) {
   })
   const [prevRound, setPrevRound] = useState(state.round)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
+
+  React.useEffect(() => {
+    if (selectedChoice === null || mySalt === null) {
+      const restored = loadSecret(state.room, state.round, me)
+      if (restored) {
+        setSelectedChoice(restored.choice)
+        setMySalt(restored.salt)
+      }
+    }
+  }, [state.room, state.round, me, selectedChoice, mySalt])
 
   if (state.round !== prevRound) {
     clearSecret(state.room, prevRound, me)
@@ -111,7 +131,7 @@ export function RpsBoard({ state, me, onMove, disabled }: RpsBoardProps) {
     if (disabled || myCommitDone || committing || state.phase !== 'commit') return
     setCommitting(true)
     try {
-      const salt = generateSalt()
+      const salt = selectedChoice === c && mySalt ? mySalt : generateSalt()
       setSelectedChoice(c)
       setMySalt(salt)
       saveSecret(state.room, state.round, me, c, salt)

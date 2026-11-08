@@ -16,7 +16,10 @@ pub const OFFSET_CHOICE_1: usize = 103; // 1 byte
 pub const OFFSET_SCORE_0: usize = 104; // 1 byte
 pub const OFFSET_SCORE_1: usize = 105; // 1 byte
 pub const OFFSET_DRAW_COUNT: usize = 106; // 1 byte
-pub const COMMIT_REVEAL_STATE_LEN: usize = 107;
+pub const OFFSET_SALT_0: usize = 107; // 32 bytes: Player 0 revealed salt
+pub const OFFSET_SALT_1: usize = 139; // 32 bytes: Player 1 revealed salt
+pub const OFFSET_ROOM_INITIALIZED: usize = 171; // 1 byte: 1 = room set
+pub const COMMIT_REVEAL_STATE_LEN: usize = 172;
 
 pub const PHASE_COMMIT: u8 = 0;
 pub const PHASE_REVEAL: u8 = 1;
@@ -93,6 +96,7 @@ impl CommitReveal {
         state[OFFSET_REVEAL_1_SET] = 0;
         state[OFFSET_CHOICE_0] = 255;
         state[OFFSET_CHOICE_1] = 255;
+        state[OFFSET_SALT_0..OFFSET_SALT_1 + 32].fill(0);
         Ok(())
     }
 }
@@ -110,6 +114,7 @@ mod tests {
         assert_eq!(state[OFFSET_COMMIT_1_SET], 0);
         assert_eq!(state[OFFSET_CHOICE_0], 255);
         assert_eq!(state[OFFSET_CHOICE_1], 255);
+        assert_eq!(state[OFFSET_SALT_0..OFFSET_SALT_1 + 32], [0u8; 64]);
 
         let mut short_state = [0u8; 50];
         assert!(CommitReveal::reset_round(&mut short_state).is_err());

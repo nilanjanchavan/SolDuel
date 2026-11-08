@@ -3,19 +3,40 @@ use super::{
         CommitReveal, ACTION_TAG_COMMIT, ACTION_TAG_REVEAL, COMMIT_REVEAL_STATE_LEN,
         OFFSET_CHOICE_0, OFFSET_CHOICE_1, OFFSET_COMMIT_0, OFFSET_COMMIT_0_SET, OFFSET_COMMIT_1,
         OFFSET_COMMIT_1_SET, OFFSET_DRAW_COUNT, OFFSET_PHASE, OFFSET_REVEAL_0_SET,
-        OFFSET_REVEAL_1_SET, OFFSET_ROOM, OFFSET_ROUND, OFFSET_SCORE_0, OFFSET_SCORE_1,
-        PHASE_COMMIT, PHASE_REVEAL,
+        OFFSET_REVEAL_1_SET, OFFSET_ROOM, OFFSET_ROOM_INITIALIZED, OFFSET_ROUND, OFFSET_SALT_0,
+        OFFSET_SALT_1, OFFSET_SCORE_0, OFFSET_SCORE_1, PHASE_COMMIT, PHASE_REVEAL,
     },
     Game, Outcome,
 };
 use crate::constants::COMMIT_REVEAL_TIMEOUT_SECS;
 use crate::errors::SolduelError;
 use anchor_lang::prelude::*;
+use sha2::{Digest, Sha256};
 
 /// Maximum allowable drawn rounds before duel terminates in a Draw
 pub const MAX_DRAWS: u8 = 5;
 
 pub struct DiceDuel;
+
+impl DiceDuel {
+    /// Deterministically derives a player's die roll (1..=6) from entropy contributed by both players.
+    pub fn derive_roll(
+        room: &[u8; 32],
+        salt_0: &[u8; 32],
+        salt_1: &[u8; 32],
+        choice_0: u8,
+        choice_1: u8,
+        player: u8,
+    ) -> u8 {
+        let mut hasher = Sha256::new();
+        hasher.update(room);
+        hasher.update(salt_0);
+        hasher.update(salt_1);
+        hasher.update(&[choice_0, choice_1, player]);
+        let hash = hasher.finalize();
+        (hash[0] % 6) + 1
+    }
+}
 
 impl Game for DiceDuel {
     fn is_skill() -> bool {
@@ -64,11 +85,10 @@ impl Game for DiceDuel {
             commit_hash.copy_from_slice(&data[33..65]);
 
             // If room is unset in state, set it from the first commit; otherwise verify matching room
-            let is_room_set = state[OFFSET_ROUND] > 0
-                || state[OFFSET_COMMIT_0_SET] == 1
-                || state[OFFSET_COMMIT_1_SET] == 1;
+            let is_room_set = state[OFFSET_ROOM_INITIALIZED] == 1;
             if !is_room_set {
                 state[OFFSET_ROOM..OFFSET_ROOM + 32].copy_from_slice(&action_room);
+                state[OFFSET_ROOM_INITIALIZED] = 1;
             } else if state[OFFSET_ROOM..OFFSET_ROOM + 32] != action_room {
                 return err!(SolduelError::InvalidGame);
             }
@@ -136,21 +156,33 @@ impl Game for DiceDuel {
                 return Ok(Outcome::Win(1 - player));
             }
 
-            // Record verified reveal and roll
+            // Record verified reveal, secret choice, and salt
             if player == 0 {
                 state[OFFSET_REVEAL_0_SET] = 1;
                 state[OFFSET_CHOICE_0] = choice;
-                state[OFFSET_SCORE_0] = choice;
+                state[OFFSET_SALT_0..OFFSET_SALT_0 + 32].copy_from_slice(&salt);
             } else {
                 state[OFFSET_REVEAL_1_SET] = 1;
                 state[OFFSET_CHOICE_1] = choice;
-                state[OFFSET_SCORE_1] = choice;
+                state[OFFSET_SALT_1..OFFSET_SALT_1 + 32].copy_from_slice(&salt);
             }
 
-            // If both players have revealed, evaluate the duel
+            // If both players have revealed, evaluate the duel with derived rolls
             if state[OFFSET_REVEAL_0_SET] == 1 && state[OFFSET_REVEAL_1_SET] == 1 {
-                let r0 = state[OFFSET_CHOICE_0];
-                let r1 = state[OFFSET_CHOICE_1];
+                let mut room = [0u8; 32];
+                room.copy_from_slice(&state[OFFSET_ROOM..OFFSET_ROOM + 32]);
+                let mut salt_0 = [0u8; 32];
+                salt_0.copy_from_slice(&state[OFFSET_SALT_0..OFFSET_SALT_0 + 32]);
+                let mut salt_1 = [0u8; 32];
+                salt_1.copy_from_slice(&state[OFFSET_SALT_1..OFFSET_SALT_1 + 32]);
+                let choice_0 = state[OFFSET_CHOICE_0];
+                let choice_1 = state[OFFSET_CHOICE_1];
+
+                let r0 = DiceDuel::derive_roll(&room, &salt_0, &salt_1, choice_0, choice_1, 0);
+                let r1 = DiceDuel::derive_roll(&room, &salt_0, &salt_1, choice_0, choice_1, 1);
+
+                state[OFFSET_SCORE_0] = r0;
+                state[OFFSET_SCORE_1] = r1;
 
                 if r0 > r1 {
                     // Player 0 rolled higher
@@ -217,7 +249,7 @@ mod tests {
         let salt0 = [10u8; 32];
         let salt1 = [20u8; 32];
 
-        // P0 rolls 6, P1 rolls 4 -> P0 wins
+        // P0 and P1 submit choices that derive rolls: r0 = 5, r1 = 3 -> P0 wins
         let hash0 = CommitReveal::compute_hash(&room, 0, 6, &salt0);
         let hash1 = CommitReveal::compute_hash(&room, 1, 4, &salt1);
 
@@ -227,8 +259,8 @@ mod tests {
         DiceDuel::apply(&mut state, 0, &encode_reveal(6, &salt0), 0).unwrap();
         let outcome = DiceDuel::apply(&mut state, 1, &encode_reveal(4, &salt1), 0).unwrap();
         assert_eq!(outcome, Outcome::Win(0));
-        assert_eq!(state[OFFSET_SCORE_0], 6);
-        assert_eq!(state[OFFSET_SCORE_1], 4);
+        assert_eq!(state[OFFSET_SCORE_0], 5);
+        assert_eq!(state[OFFSET_SCORE_1], 3);
     }
 
     #[test]
@@ -239,29 +271,33 @@ mod tests {
         let salt0 = [10u8; 32];
         let salt1 = [20u8; 32];
 
-        // Round 1: Both roll 5 -> Tie -> Continue
-        let hash0 = CommitReveal::compute_hash(&room, 0, 5, &salt0);
-        let hash1 = CommitReveal::compute_hash(&room, 1, 5, &salt1);
+        // Round 1: Choices 1 and 6 derive rolls 5 and 5 -> Tie -> Continue
+        let hash0 = CommitReveal::compute_hash(&room, 0, 1, &salt0);
+        let hash1 = CommitReveal::compute_hash(&room, 1, 6, &salt1);
 
         DiceDuel::apply(&mut state, 0, &encode_commit(&room, &hash0), 0).unwrap();
         DiceDuel::apply(&mut state, 1, &encode_commit(&room, &hash1), 0).unwrap();
 
-        DiceDuel::apply(&mut state, 0, &encode_reveal(5, &salt0), 0).unwrap();
-        let outcome1 = DiceDuel::apply(&mut state, 1, &encode_reveal(5, &salt1), 0).unwrap();
+        DiceDuel::apply(&mut state, 0, &encode_reveal(1, &salt0), 0).unwrap();
+        let outcome1 = DiceDuel::apply(&mut state, 1, &encode_reveal(6, &salt1), 0).unwrap();
         assert_eq!(outcome1, Outcome::Continue);
         assert_eq!(state[OFFSET_DRAW_COUNT], 1);
         assert_eq!(state[OFFSET_ROUND], 1);
+        assert_eq!(state[OFFSET_SCORE_0], 5);
+        assert_eq!(state[OFFSET_SCORE_1], 5);
 
-        // Round 2: P1 rolls 6, P0 rolls 2 -> P1 wins
+        // Round 2: Choices 2 and 2 derive rolls 3 and 4 -> P1 wins
         let hash0_r2 = CommitReveal::compute_hash(&room, 0, 2, &salt0);
-        let hash1_r2 = CommitReveal::compute_hash(&room, 1, 6, &salt1);
+        let hash1_r2 = CommitReveal::compute_hash(&room, 1, 2, &salt1);
 
         DiceDuel::apply(&mut state, 0, &encode_commit(&room, &hash0_r2), 0).unwrap();
         DiceDuel::apply(&mut state, 1, &encode_commit(&room, &hash1_r2), 0).unwrap();
 
         DiceDuel::apply(&mut state, 0, &encode_reveal(2, &salt0), 0).unwrap();
-        let outcome2 = DiceDuel::apply(&mut state, 1, &encode_reveal(6, &salt1), 0).unwrap();
+        let outcome2 = DiceDuel::apply(&mut state, 1, &encode_reveal(2, &salt1), 0).unwrap();
         assert_eq!(outcome2, Outcome::Win(1));
+        assert_eq!(state[OFFSET_SCORE_0], 3);
+        assert_eq!(state[OFFSET_SCORE_1], 4);
     }
 
     #[test]
@@ -371,12 +407,13 @@ mod tests {
             DiceDuel::init(&mut state, 0, 1000).unwrap();
             let mut actions = Vec::new();
 
+            let salt1_v1 = [0x22u8; 32];
             let h0 = CommitReveal::compute_hash(&room, 0, 6, &salt0);
-            let h1 = CommitReveal::compute_hash(&room, 1, 4, &salt1);
+            let h1 = CommitReveal::compute_hash(&room, 1, 4, &salt1_v1);
             let a0 = encode_commit(&room, &h0);
             let a1 = encode_commit(&room, &h1);
             let a2 = encode_reveal(6, &salt0);
-            let a3 = encode_reveal(4, &salt1);
+            let a3 = encode_reveal(4, &salt1_v1);
             actions.push(hex::encode(&a0));
             actions.push(hex::encode(&a1));
             actions.push(hex::encode(&a2));
@@ -402,12 +439,13 @@ mod tests {
             DiceDuel::init(&mut state, 0, 1000).unwrap();
             let mut actions = Vec::new();
 
+            let salt1_v2 = [0x26u8; 32];
             let h0 = CommitReveal::compute_hash(&room, 0, 2, &salt0);
-            let h1 = CommitReveal::compute_hash(&room, 1, 5, &salt1);
+            let h1 = CommitReveal::compute_hash(&room, 1, 5, &salt1_v2);
             let a0 = encode_commit(&room, &h0);
             let a1 = encode_commit(&room, &h1);
             let a2 = encode_reveal(2, &salt0);
-            let a3 = encode_reveal(5, &salt1);
+            let a3 = encode_reveal(5, &salt1_v2);
             actions.push(hex::encode(&a0));
             actions.push(hex::encode(&a1));
             actions.push(hex::encode(&a2));
@@ -452,12 +490,13 @@ mod tests {
             assert_eq!(out1, Outcome::Continue);
 
             // Round 2: 6 vs 3
+            let salt1_r2 = [0x25u8; 32];
             let h0 = CommitReveal::compute_hash(&room, 0, 6, &salt0);
-            let h1 = CommitReveal::compute_hash(&room, 1, 3, &salt1);
+            let h1 = CommitReveal::compute_hash(&room, 1, 3, &salt1_r2);
             let a4 = encode_commit(&room, &h0);
             let a5 = encode_commit(&room, &h1);
             let a6 = encode_reveal(6, &salt0);
-            let a7 = encode_reveal(3, &salt1);
+            let a7 = encode_reveal(3, &salt1_r2);
             actions.push(hex::encode(&a4));
             actions.push(hex::encode(&a5));
             actions.push(hex::encode(&a6));
@@ -513,12 +552,12 @@ mod tests {
 
             let mut out = Outcome::Continue;
             for _ in 0..5 {
-                let h0 = CommitReveal::compute_hash(&room, 0, 4, &salt0);
-                let h1 = CommitReveal::compute_hash(&room, 1, 4, &salt1);
+                let h0 = CommitReveal::compute_hash(&room, 0, 5, &salt0);
+                let h1 = CommitReveal::compute_hash(&room, 1, 5, &salt1);
                 let a0 = encode_commit(&room, &h0);
                 let a1 = encode_commit(&room, &h1);
-                let a2 = encode_reveal(4, &salt0);
-                let a3 = encode_reveal(4, &salt1);
+                let a2 = encode_reveal(5, &salt0);
+                let a3 = encode_reveal(5, &salt1);
                 actions.push(hex::encode(&a0));
                 actions.push(hex::encode(&a1));
                 actions.push(hex::encode(&a2));

@@ -7,6 +7,8 @@ export interface DiceState {
   reveals: [boolean, boolean]
   commitHashes?: [Uint8Array | null, Uint8Array | null]
   room: Uint8Array | null
+  choices?: [number, number]
+  salts?: [Uint8Array | null, Uint8Array | null]
 }
 
 export type DiceMove =

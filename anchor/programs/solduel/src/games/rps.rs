@@ -3,8 +3,8 @@ use super::{
         CommitReveal, ACTION_TAG_COMMIT, ACTION_TAG_REVEAL, COMMIT_REVEAL_STATE_LEN,
         OFFSET_CHOICE_0, OFFSET_CHOICE_1, OFFSET_COMMIT_0, OFFSET_COMMIT_0_SET, OFFSET_COMMIT_1,
         OFFSET_COMMIT_1_SET, OFFSET_DRAW_COUNT, OFFSET_PHASE, OFFSET_REVEAL_0_SET,
-        OFFSET_REVEAL_1_SET, OFFSET_ROOM, OFFSET_ROUND, OFFSET_SCORE_0, OFFSET_SCORE_1,
-        PHASE_COMMIT, PHASE_REVEAL,
+        OFFSET_REVEAL_1_SET, OFFSET_ROOM, OFFSET_ROOM_INITIALIZED, OFFSET_ROUND, OFFSET_SCORE_0,
+        OFFSET_SCORE_1, PHASE_COMMIT, PHASE_REVEAL,
     },
     Game, Outcome,
 };
@@ -87,11 +87,10 @@ impl Game for RockPaperScissors {
             commit_hash.copy_from_slice(&data[33..65]);
 
             // If room is unset in state, set it from the first commit; otherwise verify matching room
-            let is_room_set = state[OFFSET_ROUND] > 0
-                || state[OFFSET_COMMIT_0_SET] == 1
-                || state[OFFSET_COMMIT_1_SET] == 1;
+            let is_room_set = state[OFFSET_ROOM_INITIALIZED] == 1;
             if !is_room_set {
                 state[OFFSET_ROOM..OFFSET_ROOM + 32].copy_from_slice(&action_room);
+                state[OFFSET_ROOM_INITIALIZED] = 1;
             } else if state[OFFSET_ROOM..OFFSET_ROOM + 32] != action_room {
                 return err!(SolduelError::InvalidGame);
             }

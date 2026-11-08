@@ -44,14 +44,21 @@ function saveSecret(room: Uint8Array | null, round: number, me: number, choice: 
     const saltHex = Array.from(salt)
         .map((b) => b.toString(16).padStart(2, '0'))
         .join('')
-    window.sessionStorage.setItem(getStorageKey(room, round, me), JSON.stringify({ choice, saltHex }))
+    const val = JSON.stringify({ choice, saltHex })
+    window.sessionStorage.setItem(getStorageKey(room, round, me), val)
+    if (room) {
+      window.sessionStorage.setItem(getStorageKey(null, round, me), val)
+    }
   } catch {}
 }
 
 function loadSecret(room: Uint8Array | null, round: number, me: number): { choice: number; salt: Uint8Array } | null {
   if (typeof window === 'undefined') return null
   try {
-    const raw = window.sessionStorage.getItem(getStorageKey(room, round, me))
+    let raw = window.sessionStorage.getItem(getStorageKey(room, round, me))
+    if (!raw && room) {
+      raw = window.sessionStorage.getItem(getStorageKey(null, round, me))
+    }
     if (!raw) return null
     const parsed = JSON.parse(raw)
     if (typeof parsed.choice !== 'number' || !Number.isInteger(parsed.choice) || parsed.choice < 1 || parsed.choice > 6) {
@@ -72,6 +79,9 @@ function clearSecret(room: Uint8Array | null, round: number, me: number) {
   if (typeof window === 'undefined') return
   try {
     window.sessionStorage.removeItem(getStorageKey(room, round, me))
+    if (room) {
+      window.sessionStorage.removeItem(getStorageKey(null, round, me))
+    }
   } catch {}
 }
 
@@ -87,6 +97,16 @@ export function DiceBoard({ state, me, onMove, disabled }: DiceBoardProps) {
   })
   const [prevRound, setPrevRound] = useState(state.round)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
+
+  React.useEffect(() => {
+    if (selectedRoll === null || mySalt === null) {
+      const restored = loadSecret(state.room, state.round, me)
+      if (restored) {
+        setSelectedRoll(restored.choice)
+        setMySalt(restored.salt)
+      }
+    }
+  }, [state.room, state.round, me, selectedRoll, mySalt])
 
   if (state.round !== prevRound) {
     clearSecret(state.room, prevRound, me)
@@ -107,8 +127,8 @@ export function DiceBoard({ state, me, onMove, disabled }: DiceBoardProps) {
     if (disabled || myCommitDone || committing || state.phase !== 'commit') return
     setCommitting(true)
     try {
-      const roll = choice || getRandomRoll()
-      const salt = generateSalt()
+      const roll = choice || (selectedRoll !== null ? selectedRoll : getRandomRoll())
+      const salt = mySalt !== null && (choice === undefined || choice === selectedRoll) ? mySalt : generateSalt()
       setSelectedRoll(roll)
       setMySalt(salt)
       saveSecret(state.room, state.round, me, roll, salt)

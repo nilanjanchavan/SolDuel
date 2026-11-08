@@ -1,4 +1,5 @@
 import React from 'react'
+import { sha256 } from 'js-sha256'
 import { GameEngine, GameKind, GameUI, Outcome } from '../types'
 import { DiceMove, DiceState } from './types'
 import { getBotDiceMove, computeDiceHash } from './bot'
@@ -9,6 +10,29 @@ export * from './bot'
 export * from './ui'
 
 export const MAX_DRAWS = 5
+
+/**
+ * Deterministically derives a player's die roll (1..=6) from entropy contributed by both players.
+ */
+export function deriveDiceRoll(
+  room: Uint8Array,
+  salt0: Uint8Array,
+  salt1: Uint8Array,
+  choice0: number,
+  choice1: number,
+  player: 0 | 1
+): number {
+  const preimage = new Uint8Array(32 + 32 + 32 + 3)
+  preimage.set(room, 0)
+  preimage.set(salt0, 32)
+  preimage.set(salt1, 64)
+  preimage[96] = choice0
+  preimage[97] = choice1
+  preimage[98] = player
+  const hashHex = sha256(preimage)
+  const firstByte = parseInt(hashHex.slice(0, 2), 16)
+  return (firstByte % 6) + 1
+}
 
 export const diceEngine: GameEngine<DiceState, DiceMove> = {
   kind: GameKind.Dice,
@@ -24,6 +48,8 @@ export const diceEngine: GameEngine<DiceState, DiceMove> = {
       reveals: [false, false],
       commitHashes: [null, null],
       room: null,
+      choices: [255, 255],
+      salts: [null, null],
     }
   },
 
@@ -118,8 +144,10 @@ export const diceEngine: GameEngine<DiceState, DiceMove> = {
 
       const newReveals: [boolean, boolean] = [...s.reveals]
       newReveals[p] = true
-      const newRolls: [number, number] = [...s.rolls]
-      newRolls[p] = m.choice
+      const newChoices: [number, number] = s.choices ? [...s.choices] : [255, 255]
+      newChoices[p] = m.choice
+      const newSalts: [Uint8Array | null, Uint8Array | null] = s.salts ? [...s.salts] : [null, null]
+      newSalts[p] = m.salt
 
       const bothRevealed = newReveals[0] && newReveals[1]
       if (!bothRevealed) {
@@ -127,24 +155,31 @@ export const diceEngine: GameEngine<DiceState, DiceMove> = {
           state: {
             ...s,
             reveals: newReveals,
-            rolls: newRolls,
+            choices: newChoices,
+            salts: newSalts,
           },
           outcome: 'continue',
         }
       }
 
-      // Both revealed: evaluate duel
-      const r0 = newRolls[0]
-      const r1 = newRolls[1]
+      // Both revealed: derive rolls from entropy of both players
+      const room = s.room || new Uint8Array(32)
+      const salt0 = newSalts[0]!
+      const salt1 = newSalts[1]!
+      const c0 = newChoices[0]
+      const c1 = newChoices[1]
+      const r0 = deriveDiceRoll(room, salt0, salt1, c0, c1, 0)
+      const r1 = deriveDiceRoll(room, salt0, salt1, c0, c1, 1)
+      const newRolls: [number, number] = [r0, r1]
 
       if (r0 > r1) {
         return {
-          state: { ...s, rolls: newRolls, reveals: newReveals },
+          state: { ...s, rolls: newRolls, reveals: newReveals, choices: newChoices, salts: newSalts },
           outcome: { win: 0 },
         }
       } else if (r1 > r0) {
         return {
-          state: { ...s, rolls: newRolls, reveals: newReveals },
+          state: { ...s, rolls: newRolls, reveals: newReveals, choices: newChoices, salts: newSalts },
           outcome: { win: 1 },
         }
       } else {
@@ -152,7 +187,7 @@ export const diceEngine: GameEngine<DiceState, DiceMove> = {
         const newDraws = s.drawCount + 1
         if (newDraws >= MAX_DRAWS) {
           return {
-            state: { ...s, rolls: newRolls, reveals: newReveals, drawCount: newDraws },
+            state: { ...s, rolls: newRolls, reveals: newReveals, choices: newChoices, salts: newSalts, drawCount: newDraws },
             outcome: 'draw',
           }
         }
@@ -166,6 +201,8 @@ export const diceEngine: GameEngine<DiceState, DiceMove> = {
             reveals: [false, false],
             commitHashes: [null, null],
             rolls: newRolls,
+            choices: [255, 255],
+            salts: [null, null],
             drawCount: newDraws,
           },
           outcome: 'continue',
@@ -205,9 +242,13 @@ export const diceEngine: GameEngine<DiceState, DiceMove> = {
     const commitHash1 = commit1 ? buf.slice(68, 100) : null
     const reveal0 = buf[100] === 1
     const reveal1 = buf[101] === 1
+    const choice0 = buf[102]
+    const choice1 = buf[103]
     const roll0 = buf[104]
     const roll1 = buf[105]
     const drawCount = buf[106]
+    const salt0 = buf.length >= 171 && reveal0 ? buf.slice(107, 139) : null
+    const salt1 = buf.length >= 171 && reveal1 ? buf.slice(139, 171) : null
 
     return {
       round,
@@ -218,6 +259,8 @@ export const diceEngine: GameEngine<DiceState, DiceMove> = {
       reveals: [reveal0, reveal1],
       commitHashes: [commitHash0, commitHash1],
       room,
+      choices: [choice0, choice1],
+      salts: [salt0, salt1],
     }
   },
 
