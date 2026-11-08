@@ -20,18 +20,21 @@ This directory contains the dictionary builder script, reference word list, and 
 ## 2. Merkle Tree Construction Rules
 
 ### Leaf Hashing
+
 - Each leaf is computed as the raw SHA-256 digest of the UTF-8/ASCII bytes of the lowercase word:
   $$\text{leaf} = \text{SHA-256}(\text{word})$$
 - Output length: 32 bytes (`[u8; 32]`).
 - Leaves are initially ordered corresponding to the alphabetically sorted word list.
 
 ### Ordering & Parent Node Hashing (Sorted Pairs)
+
 - Internal node pairing uses **sorted pairs** (`sortPairs: true`, following OpenZeppelin / standard crypto conventions):
   $$\text{parent} = \text{SHA-256}(\min(\text{left}, \text{right}) \mathbin{\Vert} \max(\text{left}, \text{right}))$$
   where comparison is standard unsigned lexicographical byte comparison (`a < b`).
 - **Odd Node Promotion**: When a tree layer has an odd number of nodes, the trailing odd node is promoted directly to the next layer without hashing.
 
 ### Tree Properties
+
 - **Merkle Root**: `f487d5a4b05cdac2d44ea8b5249dc70e9001aca078040bc97d30652e2e16fe79`
 - **Tree Depth**: **18**
 - **Proof Length**: 18 hashes $\times$ 32 bytes = **576 bytes** per proof.

@@ -658,6 +658,30 @@ pub fn handle_cancel_room(ctx: Context<CancelRoom>) -> Result<()> {
     Ok(())
 }
 
+/// Computes the next action deadline timestamp based on the outcome and laggard transition.
+/// If the same player remains the sole laggard (e.g. Word Chain nonterminal strike), the existing deadline is preserved.
+pub fn compute_next_action_deadline(
+    game: u8,
+    state: &[u8],
+    prev_laggard: Option<u8>,
+    current_deadline_ts: i64,
+    now: i64,
+) -> Result<i64> {
+    let curr_laggard = game_laggard(game, state)?;
+    let is_same_laggard = match (prev_laggard, curr_laggard) {
+        (Some(p1), Some(p2)) => p1 == p2,
+        _ => false,
+    };
+
+    if !is_same_laggard || current_deadline_ts == 0 {
+        let deadline_secs = game_deadline_secs(game, state)?;
+        now.checked_add(deadline_secs)
+            .ok_or(SolduelError::MathOverflow.into())
+    } else {
+        Ok(current_deadline_ts)
+    }
+}
+
 /// Handler for game_action instruction.
 pub fn handle_game_action(ctx: Context<GameAction>, data: Vec<u8>) -> Result<()> {
     let room = &mut ctx.accounts.room;
@@ -679,15 +703,19 @@ pub fn handle_game_action(ctx: Context<GameAction>, data: Vec<u8>) -> Result<()>
         return err!(SolduelError::ActionTimedOut);
     }
 
+    let prev_laggard = game_laggard(room.game, &room.state)?;
     let outcome = game_apply(room.game, &mut room.state, player_idx, &data, now)?;
     room.last_action_ts = now;
 
     match outcome {
         Outcome::Continue => {
-            let deadline_secs = game_deadline_secs(room.game, &room.state)?;
-            room.deadline_ts = now
-                .checked_add(deadline_secs)
-                .ok_or(SolduelError::MathOverflow)?;
+            room.deadline_ts = compute_next_action_deadline(
+                room.game,
+                &room.state,
+                prev_laggard,
+                room.deadline_ts,
+                now,
+            )?;
         }
         Outcome::Win(winner) => {
             finish_room(&mut ctx.accounts.room, MatchResult::Win(winner), ctx.remaining_accounts)?;
