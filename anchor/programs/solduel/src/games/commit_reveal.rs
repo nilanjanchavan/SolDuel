@@ -35,7 +35,7 @@ impl CommitReveal {
     pub fn compute_hash(room: &[u8; 32], player: u8, choice: u8, salt: &[u8; 32]) -> [u8; 32] {
         let mut hasher = Sha256::new();
         hasher.update(room);
-        hasher.update(&[player, choice]);
+        hasher.update([player, choice]);
         hasher.update(salt);
         hasher.finalize().into()
     }

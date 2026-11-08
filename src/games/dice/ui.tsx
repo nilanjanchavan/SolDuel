@@ -30,11 +30,10 @@ function getRandomRoll(): number {
 }
 
 function getStorageKey(room: Uint8Array | null, round: number, me: number): string {
-  const roomHex = room
-    ? Array.from(room)
-        .map((b) => b.toString(16).padStart(2, '0'))
-        .join('')
-    : 'default'
+  const norm = room || new Uint8Array(32)
+  const roomHex = Array.from(norm)
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('')
   return `solduel-dice-${roomHex}-${round}-${me}`
 }
 
@@ -85,6 +84,9 @@ function clearSecret(room: Uint8Array | null, round: number, me: number) {
   } catch {}
 }
 
+/**
+ * Dice Duel interactive board component for commit-reveal gameplay.
+ */
 export function DiceBoard({ state, me, onMove, disabled }: DiceBoardProps) {
   const [committing, setCommitting] = useState(false)
   const [selectedRoll, setSelectedRoll] = useState<number | null>(() => {
@@ -97,16 +99,6 @@ export function DiceBoard({ state, me, onMove, disabled }: DiceBoardProps) {
   })
   const [prevRound, setPrevRound] = useState(state.round)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
-
-  React.useEffect(() => {
-    if (selectedRoll === null || mySalt === null) {
-      const restored = loadSecret(state.room, state.round, me)
-      if (restored) {
-        setSelectedRoll(restored.choice)
-        setMySalt(restored.salt)
-      }
-    }
-  }, [state.room, state.round, me, selectedRoll, mySalt])
 
   if (state.round !== prevRound) {
     clearSecret(state.room, prevRound, me)
@@ -128,7 +120,7 @@ export function DiceBoard({ state, me, onMove, disabled }: DiceBoardProps) {
     setErrorMessage(null)
     setCommitting(true)
     try {
-      const roll = choice || (selectedRoll !== null ? selectedRoll : getRandomRoll())
+      const roll = choice !== undefined ? choice : (selectedRoll !== null ? selectedRoll : getRandomRoll())
       const salt = mySalt !== null && (choice === undefined || choice === selectedRoll) ? mySalt : generateSalt()
       setSelectedRoll(roll)
       setMySalt(salt)
