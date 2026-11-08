@@ -23,8 +23,8 @@ export function AppHeader({ links = [] }: { links: { label: string; path: string
   }
 
   return (
-    <header className="sticky top-0 z-50 px-4 md:px-8 py-2.5 bg-[#05090f]/90 backdrop-blur-md border-b border-emerald-500/20 text-slate-300 font-mono">
-      <div className="max-w-7xl mx-auto flex justify-between items-center">
+    <header className="sticky top-0 z-50 px-4 sm:px-6 lg:px-8 py-2.5 bg-[#05090f]/90 backdrop-blur-md border-b border-emerald-500/20 text-slate-300 font-mono">
+      <div className="max-w-[1550px] w-full mx-auto flex justify-between items-center">
         {/* Brand Terminal Header */}
         <div className="flex items-center gap-6">
           <Link className="flex items-center gap-2.5 group" href="/">

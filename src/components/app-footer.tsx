@@ -8,7 +8,7 @@ import { Terminal, ExternalLink, ShieldAlert, Cpu } from 'lucide-react'
 export function AppFooter() {
   return (
     <footer className="mt-16 border-t border-emerald-500/20 bg-[#05090f]/95 text-slate-400 font-mono text-xs">
-      <div className="max-w-6xl mx-auto px-4 py-8 flex flex-col md:flex-row items-center justify-between gap-6">
+      <div className="max-w-[1550px] w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 flex flex-col md:flex-row items-center justify-between gap-6">
         {/* Terminal Protocol Telemetry */}
         <div className="flex flex-col items-center md:items-start gap-1 text-center md:text-left">
           <div className="flex items-center gap-2 text-emerald-400 font-bold text-xs tracking-wider">

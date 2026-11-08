@@ -22,7 +22,7 @@ export function AppLayout({
     <ThemeProvider attribute="class" defaultTheme="dark" enableSystem disableTransitionOnChange>
       <div className="flex flex-col min-h-screen bg-slate-950 text-slate-100 selection:bg-amber-500/30 selection:text-amber-200">
         <AppHeader links={links} />
-        <main className="flex-grow max-w-6xl w-full mx-auto px-4 py-6">
+        <main className="flex-grow max-w-[1550px] w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
           <ClusterChecker>
             <AccountChecker />
           </ClusterChecker>
