@@ -88,6 +88,9 @@ function clearSecret(room: Uint8Array | null, round: number, me: number) {
   } catch {}
 }
 
+/**
+ * Rock Paper Scissors interactive board component for commit-reveal gameplay.
+ */
 export function RpsBoard({ state, me, onMove, disabled }: RpsBoardProps) {
   const [committing, setCommitting] = useState(false)
   const [selectedChoice, setSelectedChoice] = useState<RpsChoice | null>(() => {
@@ -100,16 +103,6 @@ export function RpsBoard({ state, me, onMove, disabled }: RpsBoardProps) {
   })
   const [prevRound, setPrevRound] = useState(state.round)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
-
-  React.useEffect(() => {
-    if (selectedChoice === null || mySalt === null) {
-      const restored = loadSecret(state.room, state.round, me)
-      if (restored) {
-        setSelectedChoice(restored.choice)
-        setMySalt(restored.salt)
-      }
-    }
-  }, [state.room, state.round, me, selectedChoice, mySalt])
 
   if (state.round !== prevRound) {
     clearSecret(state.room, prevRound, me)

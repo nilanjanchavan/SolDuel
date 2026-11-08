@@ -42,6 +42,9 @@ const GAME_META: Record<GameKind, GameMeta> = {
   },
 }
 
+/**
+ * Maps a route URL slug to a valid GameKind or invokes notFound() for invalid slugs.
+ */
 function parseGameKind(slug: string | undefined): GameKind {
   if (!slug) return GameKind.ConnectFour
   const s = slug.toLowerCase()
@@ -72,6 +75,9 @@ interface PracticeMatchProps {
   onRematch(): void
 }
 
+/**
+ * Renders an offline practice match against an autonomous AI bot.
+ */
 function PracticeMatch({ gameRecord, gameInfo, difficulty, onRematch }: PracticeMatchProps) {
   const engine = gameRecord.engine
   const UIComponent = gameRecord.ui.Board
@@ -226,13 +232,16 @@ function PracticeMatch({ gameRecord, gameInfo, difficulty, onRematch }: Practice
   )
 }
 
+/**
+ * Practice mode route allowing players to duel AI bots offline without staking coins.
+ */
 export default function PracticeGamePage() {
   const params = useParams()
   const router = useRouter()
   const gameSlug = Array.isArray(params?.game) ? params.game[0] : params?.game
 
   const selectedKind = useMemo(() => parseGameKind(gameSlug), [gameSlug])
-  const gameInfo = GAME_META[selectedKind] || GAME_META[GameKind.ConnectFour]
+  const gameInfo = GAME_META[selectedKind]
   const gameRecord = GAME_REGISTRY[selectedKind]
 
   const [difficulty, setDifficulty] = useState<Difficulty>('medium')
