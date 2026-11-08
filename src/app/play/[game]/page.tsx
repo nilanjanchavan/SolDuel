@@ -15,7 +15,19 @@ interface GameMeta {
   description: string
 }
 
-const GAME_META: Partial<Record<GameKind, GameMeta>> = {
+const GAME_META: Record<GameKind, GameMeta> = {
+  [GameKind.ConnectFour]: {
+    name: 'Connect Four',
+    slug: 'connect-four',
+    icon: '🔴',
+    description: 'Classic 7x6 tactical gravity grid, 4-in-a-row wins',
+  },
+  [GameKind.WordChain]: {
+    name: 'Word Chain',
+    slug: 'word-chain',
+    icon: '🔤',
+    description: 'Skill game with Merkle dictionary verification, 30s timer & strikes',
+  },
   [GameKind.Rps]: {
     name: 'Rock Paper Scissors',
     slug: 'rps',
@@ -31,9 +43,17 @@ const GAME_META: Partial<Record<GameKind, GameMeta>> = {
 }
 
 function parseGameKind(slug: string | undefined): GameKind {
-  if (!slug) return GameKind.Rps
+  if (!slug) return GameKind.ConnectFour
   const s = slug.toLowerCase()
   switch (s) {
+    case 'connect-four':
+    case 'connectfour':
+    case 'c4':
+      return GameKind.ConnectFour
+    case 'word-chain':
+    case 'wordchain':
+    case 'wc':
+      return GameKind.WordChain
     case 'rps':
     case 'rock-paper-scissors':
       return GameKind.Rps
@@ -71,6 +91,9 @@ function PracticeMatch({ gameRecord, gameInfo, difficulty, onRematch }: Practice
       if (s.phase === 'commit' && !commits[1]) return true
       if (s.phase === 'reveal' && !reveals[1]) return true
       return false
+    }
+    if ('turn' in s) {
+      return s.turn === 1
     }
     if ('currentTurn' in s) {
       return s.currentTurn === 1
@@ -209,7 +232,7 @@ export default function PracticeGamePage() {
   const gameSlug = Array.isArray(params?.game) ? params.game[0] : params?.game
 
   const selectedKind = useMemo(() => parseGameKind(gameSlug), [gameSlug])
-  const gameInfo = GAME_META[selectedKind] || GAME_META[GameKind.Rps]!
+  const gameInfo = GAME_META[selectedKind] || GAME_META[GameKind.ConnectFour]
   const gameRecord = GAME_REGISTRY[selectedKind]
 
   const [difficulty, setDifficulty] = useState<Difficulty>('medium')
