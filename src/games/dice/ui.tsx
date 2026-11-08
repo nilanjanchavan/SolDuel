@@ -200,7 +200,7 @@ export function DiceBoard({ state, me, onMove, disabled }: DiceBoardProps) {
         >
           <div className="text-xs">Your Status</div>
           <div className="font-semibold text-sm mt-1">
-            {myRevealDone ? `✓ Revealed (${selectedRoll})` : myCommitDone ? '✓ Committed' : 'Waiting to roll...'}
+            {myRevealDone ? '✓ Revealed' : myCommitDone ? '✓ Committed' : 'Waiting to roll...'}
           </div>
         </div>
         <div
@@ -222,23 +222,11 @@ export function DiceBoard({ state, me, onMove, disabled }: DiceBoardProps) {
             onClick={() => handleRollDice()}
             className="w-full py-5 px-6 rounded-xl bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 text-slate-950 font-black text-xl shadow-lg shadow-orange-900/30 transition-all cursor-pointer active:scale-98 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            🎲 Commit Random Secret
+            🎲 Roll Dice
           </button>
-
-          <div className="mt-4 flex items-center justify-center space-x-2 text-xs text-slate-500">
-            <span>Or choose secret number:</span>
-            {[1, 2, 3, 4, 5, 6].map((num) => (
-              <button
-                key={num}
-                type="button"
-                disabled={disabled || myCommitDone}
-                onClick={() => handleRollDice(num)}
-                className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold cursor-pointer"
-              >
-                {DIE_FACES[num]} {num}
-              </button>
-            ))}
-          </div>
+          <p className="text-[11px] text-slate-500 mt-2">
+            Generates a cryptographically secure random roll and seals it on-chain with a secret salt.
+          </p>
         </div>
       )}
 
@@ -247,7 +235,7 @@ export function DiceBoard({ state, me, onMove, disabled }: DiceBoardProps) {
         <div className="w-full text-center">
           {myRevealDone ? (
             <div className="py-4 text-emerald-400 font-medium text-sm motion-safe:animate-pulse">
-              You revealed secret choice {selectedRoll ? `${DIE_FACES[selectedRoll]} (${selectedRoll})` : ''}! Awaiting opponent...
+              You revealed your roll! Awaiting opponent...
             </div>
           ) : (
             <div>
@@ -257,7 +245,7 @@ export function DiceBoard({ state, me, onMove, disabled }: DiceBoardProps) {
                 onClick={handleReveal}
                 className="w-full py-4 px-6 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white font-bold text-lg shadow-lg shadow-emerald-900/30 transition-all cursor-pointer active:scale-98"
               >
-                Reveal Secret Choice {selectedRoll ? `${DIE_FACES[selectedRoll]} (${selectedRoll})` : ''}
+                🎲 Reveal Roll
               </button>
             </div>
           )}

@@ -126,7 +126,7 @@ export function CyberRulesTerminal({
   }, [gameId, spec])
 
   return (
-    <div className="rounded-xl hacker-panel border border-emerald-500/30 p-4 font-mono text-xs flex flex-col justify-between h-full min-h-[220px]">
+    <div className="rounded-xl hacker-panel border border-emerald-500/30 p-4 font-mono text-xs flex flex-col justify-between h-full min-h-[280px]">
       <div>
         {/* Sleek Top Header */}
         <div className="flex items-center justify-between pb-2.5 mb-3 border-b border-slate-800/80">

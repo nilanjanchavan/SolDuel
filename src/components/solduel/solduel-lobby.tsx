@@ -26,8 +26,9 @@ import {
   Key,
   Terminal,
   Search,
-  ExternalLink,
   ShieldCheck,
+  Swords,
+  Coins,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -36,6 +37,7 @@ interface GameItem {
   slug: string;
   name: string;
   icon: string;
+  tag: string;
   skill: boolean;
   clock: string;
 }
@@ -46,6 +48,7 @@ const GAMES: GameItem[] = [
     slug: 'connect-four',
     name: 'Connect Four',
     icon: '🔴',
+    tag: 'Tactical Grid',
     skill: true,
     clock: '60s',
   },
@@ -54,6 +57,7 @@ const GAMES: GameItem[] = [
     slug: 'word-chain',
     name: 'Word Chain',
     icon: '🔤',
+    tag: 'Prefix Speed',
     skill: true,
     clock: '30s',
   },
@@ -62,6 +66,7 @@ const GAMES: GameItem[] = [
     slug: 'rps',
     name: 'Rock Paper Scissors',
     icon: '✂️',
+    tag: 'Commit-Reveal',
     skill: false,
     clock: '60s',
   },
@@ -70,16 +75,17 @@ const GAMES: GameItem[] = [
     slug: 'dice',
     name: 'Dice Duel',
     icon: '🎲',
+    tag: 'Joint Entropy',
     skill: false,
     clock: '60s',
   },
 ];
 
-const TIER_LABELS = ['Casual', 'Contender', 'High Roller 👑'];
+const TIER_LABELS = ['Casual Duel', 'Contender', 'High Roller 👑'];
 
 /**
- * Sleek, uncluttered SolDuel Lobby.
- * Balances high-tech cyber style with clean, minimalist UX.
+ * Clean, intentional, and appealing SolDuel Lobby.
+ * Proportional architecture, harmonious heights, and tactile cyber styling.
  */
 export function SolduelLobby() {
   const router = useRouter();
@@ -332,28 +338,32 @@ export function SolduelLobby() {
   };
 
   return (
-    <div className="w-full space-y-6 py-1 font-mono">
-      {/* Sleek Minimal Top Command Bar */}
+    <div className="w-full space-y-6 py-2 font-mono">
+      {/* Sleek Intentional Top Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 pb-4 border-b border-emerald-500/20">
         <div>
-          <div className="flex items-center gap-2 text-xs font-bold">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-            <span className="text-emerald-400 tracking-wider">SOLDUEL</span>
+          <div className="flex items-center gap-2.5">
+            <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.8)]" />
+            <h1 className="text-lg font-black tracking-widest text-white">
+              SOL<span className="text-emerald-400">DUEL</span>
+            </h1>
             <span className="text-slate-600">//</span>
-            <span className="text-slate-300">STAKED 1V1 MINIGAMES</span>
-            <span className="text-[10px] text-cyan-400 bg-cyan-950/60 border border-cyan-500/30 px-1.5 py-0.2 rounded font-normal">
+            <span className="text-xs font-bold text-slate-300 tracking-wider">
+              1V1 STAKED ARENA
+            </span>
+            <span className="text-[10px] text-cyan-400 bg-cyan-950/70 border border-cyan-500/30 px-2 py-0.5 rounded font-semibold">
               DEVNET
             </span>
           </div>
-          <p className="text-xs text-slate-500 mt-1">
-            Peer-to-peer on-chain duels. Instant PDA escrow settlement.
+          <p className="text-xs text-slate-400 mt-1">
+            Provably fair, non-custodial minigames on Solana. Instant on-chain escrow payouts.
           </p>
         </div>
 
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-3 shrink-0">
           <Link
             href={`/play/${currentGame.slug}`}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-900/80 hover:bg-slate-800 text-slate-300 border border-slate-700/60 hover:border-emerald-500/40 transition-all"
+            className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold bg-[#09111e] hover:bg-[#0d1829] text-emerald-300 border border-emerald-500/30 hover:border-emerald-400 transition-all shadow-[0_0_10px_rgba(16,185,129,0.15)]"
           >
             <Terminal className="h-3.5 w-3.5 text-emerald-400" />
             <span>Practice Bots</span>
@@ -362,24 +372,24 @@ export function SolduelLobby() {
         </div>
       </div>
 
-      {/* Main Cockpit Layout: 2 Clean Columns (7 cols / 5 cols) */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+      {/* Main Cockpit Layout: 2 Proportional Columns (7 cols / 5 cols) */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
         {/* Left Column: Game Module Selection & Stake */}
-        <div className="lg:col-span-7 space-y-5">
+        <div className="lg:col-span-7 space-y-6 flex flex-col justify-between">
           {/* 01 / SELECT GAME */}
-          <div className="space-y-2.5">
+          <div className="space-y-3">
             <div className="flex items-center justify-between text-xs">
-              <span className="text-slate-400 font-bold uppercase tracking-wider flex items-center gap-1.5">
-                <span className="text-emerald-400">01</span>
-                <span>/</span>
-                <span>Select Game</span>
+              <span className="text-slate-300 font-bold uppercase tracking-wider flex items-center gap-2">
+                <span className="text-emerald-400 font-black">01</span>
+                <span className="text-slate-600">/</span>
+                <span>Select Minigame</span>
               </span>
-              <span className="text-[10px] text-slate-500">Hover to inspect rules</span>
+              <span className="text-[11px] text-slate-500">Hover card to stream rules</span>
             </div>
 
-            {/* Split: Clean Game List on Left + Floating Rules HUD on Right */}
-            <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-stretch">
-              {/* Game Cards Column (5 cols on md+) */}
+            {/* Split: Clean Game Cartridges on Left (5 cols) + Floating Rules HUD on Right (7 cols) */}
+            <div className="grid grid-cols-1 md:grid-cols-12 gap-3.5 items-stretch">
+              {/* Game Cartridges (5 cols on md+) */}
               <div className="md:col-span-5 flex flex-col gap-2">
                 {GAMES.map((game) => {
                   const isSelected = selectedGame === game.id;
@@ -392,30 +402,34 @@ export function SolduelLobby() {
                       onMouseEnter={() => setHoveredGame(game.id)}
                       onMouseLeave={() => setHoveredGame(null)}
                       onClick={() => setSelectedGame(game.id)}
-                      className={`relative p-3 rounded-xl text-left transition-all cursor-pointer flex items-center justify-between border ${
+                      className={`h-[64px] px-3.5 rounded-xl text-left transition-all cursor-pointer flex items-center justify-between border ${
                         isSelected
-                          ? 'bg-emerald-950/40 border-emerald-400 shadow-[0_0_12px_rgba(16,185,129,0.3)]'
+                          ? 'bg-emerald-950/40 border-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.25)] border-l-4 border-l-emerald-400'
                           : isHovered
-                            ? 'bg-[#0a1220] border-emerald-500/50'
-                            : 'bg-[#080d16]/80 border-slate-850 hover:border-slate-750 text-slate-400'
+                            ? 'bg-[#0a1220] border-emerald-500/50 border-l-4 border-l-emerald-500/60'
+                            : 'bg-[#080d16]/90 border-slate-800/80 hover:border-slate-700 text-slate-400'
                       }`}
                     >
-                      <div className="flex items-center gap-2.5">
-                        <span className="text-base select-none">{game.icon}</span>
+                      <div className="flex items-center gap-3">
+                        <span className="text-xl select-none">{game.icon}</span>
                         <div>
-                          <div className={`text-xs font-bold ${isSelected ? 'text-white' : 'text-slate-200'}`}>
+                          <div className={`text-sm font-bold tracking-wide ${isSelected ? 'text-white' : 'text-slate-200'}`}>
                             {game.name}
                           </div>
-                          <div className="text-[10px] text-slate-500 font-normal">
-                            {game.skill ? 'Skill · ELO' : 'Luck Duel'}
+                          <div className="text-[10px] text-slate-500 font-mono">
+                            {game.tag} · {game.skill ? 'Skill (ELO)' : 'Luck Duel'}
                           </div>
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-2">
-                        <span className="text-[10px] text-slate-500">{game.clock}</span>
-                        {isSelected && (
-                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(16,185,129,0.8)]" />
+                      <div className="flex items-center gap-2.5">
+                        <span className="text-[10px] text-slate-400 font-mono bg-slate-900/80 px-2 py-0.5 rounded border border-slate-800">
+                          {game.clock}
+                        </span>
+                        {isSelected ? (
+                          <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(16,185,129,0.9)] animate-pulse" />
+                        ) : (
+                          <span className="w-2 h-2 rounded-full bg-slate-700" />
                         )}
                       </div>
                     </button>
@@ -434,17 +448,17 @@ export function SolduelLobby() {
           </div>
 
           {/* 02 / SELECT STAKE */}
-          <div className="space-y-2.5">
+          <div className="space-y-3">
             <div className="flex items-center justify-between text-xs">
-              <span className="text-slate-400 font-bold uppercase tracking-wider flex items-center gap-1.5">
-                <span className="text-emerald-400">02</span>
-                <span>/</span>
-                <span>Select Stake</span>
+              <span className="text-slate-300 font-bold uppercase tracking-wider flex items-center gap-2">
+                <span className="text-emerald-400 font-black">02</span>
+                <span className="text-slate-600">/</span>
+                <span>Select Stake Tier</span>
               </span>
-              <span className="text-[10px] text-slate-500">1 Coin = 0.0001 SOL</span>
+              <span className="text-[11px] text-slate-500 font-mono">1 Coin = 0.0001 SOL</span>
             </div>
 
-            <div className="grid grid-cols-3 gap-2.5">
+            <div className="grid grid-cols-3 gap-3">
               {STAKE_TIERS_COINS.map((coins, tierIdx) => {
                 const solAmount = (coins * LAMPORTS_PER_COIN) / 1_000_000_000;
                 const isSelected = selectedTier === tierIdx;
@@ -455,18 +469,26 @@ export function SolduelLobby() {
                     key={tierIdx}
                     type="button"
                     onClick={() => setSelectedTier(tierIdx)}
-                    className={`p-3 rounded-xl border text-center transition-all cursor-pointer ${
+                    className={`p-3.5 rounded-xl border text-left transition-all cursor-pointer relative ${
                       isSelected
-                        ? 'bg-cyan-950/30 border-cyan-400 shadow-[0_0_12px_rgba(6,182,212,0.3)]'
-                        : 'bg-[#080d16]/80 border-slate-850 hover:border-slate-750 text-slate-400'
+                        ? 'bg-cyan-950/30 border-cyan-400 shadow-[0_0_15px_rgba(6,182,212,0.25)] border-t-2 border-t-cyan-400 scale-[1.01]'
+                        : 'bg-[#080d16]/90 border-slate-800/80 hover:border-slate-700 text-slate-400'
                     }`}
                   >
-                    <div className="text-[10px] text-slate-500 mb-0.5">{label}</div>
-                    <div className="text-lg font-black text-white">
-                      {coins} <span className="text-xs text-cyan-400 font-bold">Coins</span>
+                    <div className="flex justify-between items-center text-[10px] text-slate-500 font-mono mb-1">
+                      <span>{label}</span>
+                      <span className={isSelected ? 'text-cyan-400 font-bold' : 'text-slate-500'}>
+                        TIER {tierIdx + 1}
+                      </span>
                     </div>
-                    <div className="text-[11px] text-slate-400 mt-0.5">
-                      {solAmount} SOL
+                    <div className="text-xl font-black text-white tracking-wider">
+                      {coins} <span className="text-xs text-cyan-400 font-bold">COINS</span>
+                    </div>
+                    <div className="flex justify-between items-center mt-1 text-[11px]">
+                      <span className="text-slate-400 font-mono">{solAmount} SOL</span>
+                      <span className="text-emerald-400/90 font-mono font-semibold">
+                        Pot: {coins * 2}
+                      </span>
                     </div>
                   </button>
                 );
@@ -475,159 +497,163 @@ export function SolduelLobby() {
           </div>
         </div>
 
-        {/* Right Column: Action Matchmaking Deck */}
-        <div className="lg:col-span-5 space-y-4">
-          <div className="p-5 rounded-xl hacker-panel border border-emerald-500/25 space-y-4">
-            {/* 3-Pill Action Switcher */}
-            <div className="grid grid-cols-3 gap-1 bg-[#05090f] p-1 rounded-lg border border-slate-850">
-              <button
-                type="button"
-                onClick={() => setActiveTab('quick')}
-                className={`py-1.5 text-xs font-semibold rounded transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
-                  activeTab === 'quick'
-                    ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/50 shadow-[0_0_8px_rgba(16,185,129,0.25)]'
-                    : 'text-slate-400 hover:text-white'
-                }`}
-              >
-                <Zap className="h-3.5 w-3.5" />
-                <span>Quick Play</span>
-              </button>
+        {/* Right Column: The Battle Arena Action Deck */}
+        <div className="lg:col-span-5 flex flex-col justify-between">
+          <div className="p-6 rounded-2xl hacker-panel border border-emerald-500/30 space-y-5 h-full flex flex-col justify-between shadow-[0_0_20px_rgba(0,0,0,0.6)]">
+            <div className="space-y-4">
+              {/* 3-Pill Action Switcher */}
+              <div className="grid grid-cols-3 gap-1.5 bg-[#040812] p-1.5 rounded-xl border border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('quick')}
+                  className={`py-2 text-xs font-bold rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                    activeTab === 'quick'
+                      ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/50 shadow-[0_0_10px_rgba(16,185,129,0.25)]'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  <Zap className="h-3.5 w-3.5" />
+                  <span>Quick Play</span>
+                </button>
 
-              <button
-                type="button"
-                onClick={() => setActiveTab('create')}
-                className={`py-1.5 text-xs font-semibold rounded transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
-                  activeTab === 'create'
-                    ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/50 shadow-[0_0_8px_rgba(6,182,212,0.25)]'
-                    : 'text-slate-400 hover:text-white'
-                }`}
-              >
-                <Plus className="h-3.5 w-3.5" />
-                <span>Create</span>
-              </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('create')}
+                  className={`py-2 text-xs font-bold rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                    activeTab === 'create'
+                      ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/50 shadow-[0_0_10px_rgba(6,182,212,0.25)]'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  <span>Create Room</span>
+                </button>
 
-              <button
-                type="button"
-                onClick={() => setActiveTab('join')}
-                className={`py-1.5 text-xs font-semibold rounded transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
-                  activeTab === 'join'
-                    ? 'bg-amber-500/20 text-amber-300 border border-amber-500/50 shadow-[0_0_8px_rgba(245,158,11,0.25)]'
-                    : 'text-slate-400 hover:text-white'
-                }`}
-              >
-                <Key className="h-3.5 w-3.5" />
-                <span>Join Code</span>
-              </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('join')}
+                  className={`py-2 text-xs font-bold rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                    activeTab === 'join'
+                      ? 'bg-amber-500/20 text-amber-300 border border-amber-500/50 shadow-[0_0_10px_rgba(245,158,11,0.25)]'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  <Key className="h-3.5 w-3.5" />
+                  <span>Join Code</span>
+                </button>
+              </div>
+
+              {/* Live Match Pot Arena Bracket */}
+              <div className="p-4 rounded-xl bg-[#040812] border border-slate-800 space-y-2.5">
+                <div className="flex items-center justify-between text-xs">
+                  <div className="flex items-center gap-1.5">
+                    <div className="w-2 h-2 rounded-full bg-cyan-400" />
+                    <span className="text-slate-400 font-mono">YOU:</span>
+                    <span className="text-white font-bold font-mono">{currentStakeSol} SOL</span>
+                  </div>
+                  <span className="text-[10px] text-amber-400 font-bold font-mono px-2 py-0.5 rounded bg-amber-950/60 border border-amber-500/30 flex items-center gap-1">
+                    <Swords className="h-3 w-3" />
+                    <span>1v1</span>
+                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-slate-400 font-mono">OPPONENT:</span>
+                    <span className="text-white font-bold font-mono">{currentStakeSol} SOL</span>
+                    <div className="w-2 h-2 rounded-full bg-emerald-400" />
+                  </div>
+                </div>
+
+                <div className="pt-2.5 border-t border-slate-800/80 flex items-center justify-between">
+                  <div className="flex items-center gap-1.5 text-xs text-slate-400 font-mono">
+                    <Coins className="h-4 w-4 text-emerald-400" />
+                    <span>WINNER POT:</span>
+                  </div>
+                  <span className="text-base font-black text-emerald-400 font-mono tracking-wide">
+                    {totalPotCoins} COINS <span className="text-xs text-emerald-500 font-normal">({totalPotSol} SOL)</span>
+                  </span>
+                </div>
+              </div>
+
+              {/* TAB 1: QUICK PLAY */}
+              {activeTab === 'quick' && (
+                <div className="space-y-4 pt-1">
+                  <p className="text-xs text-slate-400 leading-relaxed">
+                    Pairs instantly with an on-chain challenger in <strong className="text-white">{currentGame.name}</strong>, or posts a 120-second open spot.
+                  </p>
+
+                  <Button
+                    className="w-full bg-emerald-500 hover:bg-emerald-400 active:bg-emerald-600 text-slate-950 font-black py-6 text-sm rounded-xl shadow-[0_0_20px_rgba(16,185,129,0.35)] transition-all cursor-pointer tracking-wider"
+                    disabled={isQuickPlaying}
+                    onClick={handleQuickPlay}
+                  >
+                    {isQuickPlaying ? 'FINDING CHALLENGER...' : `EXECUTE QUICK MATCH · ${currentStakeSol} SOL`}
+                  </Button>
+                </div>
+              )}
+
+              {/* TAB 2: CREATE ROOM */}
+              {activeTab === 'create' && (
+                <div className="space-y-4 pt-1">
+                  <p className="text-xs text-slate-400 leading-relaxed">
+                    Initializes a MatchRoom PDA and generates a shareable room code (<code className="text-cyan-400">SD-XXXXXXXX</code>).
+                  </p>
+
+                  <div className="space-y-1.5">
+                    <Label htmlFor="opponent" className="text-[11px] text-slate-400">
+                      Opponent Address (Optional Whitelist)
+                    </Label>
+                    <Input
+                      id="opponent"
+                      placeholder="Leave blank for open duel, or paste wallet"
+                      value={allowedOpponent}
+                      onChange={(e) => setAllowedOpponent(e.target.value)}
+                      className="font-mono text-xs bg-[#040812] border-slate-800 text-slate-200 placeholder:text-slate-600 rounded-lg py-2.5 focus:border-cyan-500"
+                    />
+                  </div>
+
+                  <Button
+                    className="w-full bg-cyan-500 hover:bg-cyan-400 active:bg-cyan-600 text-slate-950 font-black py-6 text-sm rounded-xl shadow-[0_0_20px_rgba(6,182,212,0.35)] transition-all cursor-pointer tracking-wider"
+                    disabled={isCreating}
+                    onClick={handleCreateRoom}
+                  >
+                    {isCreating ? 'CREATING ROOM...' : `DEPLOY ROOM & GET CODE · ${currentStakeSol} SOL`}
+                  </Button>
+                </div>
+              )}
+
+              {/* TAB 3: JOIN BY CODE */}
+              {activeTab === 'join' && (
+                <form onSubmit={handleJoinByCode} className="space-y-4 pt-1">
+                  <p className="text-xs text-slate-400 leading-relaxed">
+                    Enter an 8-character room code or paste the room PDA to decrypt and enter.
+                  </p>
+
+                  <div className="relative">
+                    <Input
+                      id="joinCode"
+                      placeholder="e.g. SD-8F9A2B or room PDA"
+                      value={joinCodeInput}
+                      onChange={(e) => setJoinCodeInput(e.target.value)}
+                      className="font-mono text-xs uppercase bg-[#040812] border-amber-500/40 text-amber-300 placeholder:text-slate-600 rounded-lg py-3 pl-3 pr-9 tracking-wider focus:border-amber-400"
+                    />
+                    <Search className="absolute right-3 top-3 h-4 w-4 text-amber-400/60 pointer-events-none" />
+                  </div>
+
+                  <Button
+                    type="submit"
+                    className="w-full bg-amber-500 hover:bg-amber-400 active:bg-amber-600 text-slate-950 font-black py-6 text-sm rounded-xl shadow-[0_0_20px_rgba(245,158,11,0.35)] transition-all cursor-pointer tracking-wider"
+                    disabled={isSearchingCode || !joinCodeInput.trim()}
+                  >
+                    {isSearchingCode ? 'RESOLVING ROOM...' : 'ENTER MATCHROOM'}
+                  </Button>
+                </form>
+              )}
             </div>
 
-            {/* TAB 1: QUICK PLAY */}
-            {activeTab === 'quick' && (
-              <div className="space-y-4 pt-1">
-                <p className="text-xs text-slate-400 leading-relaxed">
-                  Match instantly with an active challenger in <strong className="text-slate-200">{currentGame.name}</strong>, or open a 120s queue spot.
-                </p>
-
-                {/* Pot Preview Pill */}
-                <div className="p-3 rounded-lg bg-[#05090f] border border-slate-800 flex justify-between items-center text-xs">
-                  <div>
-                    <span className="text-[10px] text-slate-500 block">YOUR STAKE</span>
-                    <span className="text-slate-200 font-bold">{currentStakeSol} SOL</span>
-                  </div>
-                  <div className="text-right">
-                    <span className="text-[10px] text-emerald-400 block font-semibold">POT TO WIN</span>
-                    <span className="text-emerald-300 font-bold text-sm">
-                      {totalPotCoins} Coins ({totalPotSol} SOL)
-                    </span>
-                  </div>
-                </div>
-
-                <Button
-                  className="w-full bg-emerald-500 hover:bg-emerald-400 active:bg-emerald-600 text-slate-950 font-black py-5 text-xs rounded-lg shadow-[0_0_15px_rgba(16,185,129,0.35)] transition-all cursor-pointer tracking-wider"
-                  disabled={isQuickPlaying}
-                  onClick={handleQuickPlay}
-                >
-                  {isQuickPlaying ? 'FINDING CHALLENGER...' : `FIND MATCH · ${currentStakeSol} SOL`}
-                </Button>
-              </div>
-            )}
-
-            {/* TAB 2: CREATE ROOM */}
-            {activeTab === 'create' && (
-              <div className="space-y-4 pt-1">
-                <p className="text-xs text-slate-400 leading-relaxed">
-                  Deploys an on-chain room and generates a short code (<code className="text-cyan-400">SD-XXXXXXXX</code>) to invite a challenger.
-                </p>
-
-                <div className="space-y-1.5">
-                  <Label htmlFor="opponent" className="text-[11px] text-slate-400">
-                    Opponent Address (Optional)
-                  </Label>
-                  <Input
-                    id="opponent"
-                    placeholder="Leave blank for open duel, or paste wallet"
-                    value={allowedOpponent}
-                    onChange={(e) => setAllowedOpponent(e.target.value)}
-                    className="font-mono text-xs bg-[#05090f] border-slate-800 text-slate-200 placeholder:text-slate-600 rounded py-2"
-                  />
-                </div>
-
-                {/* Pot Preview Pill */}
-                <div className="p-3 rounded-lg bg-[#05090f] border border-slate-800 flex justify-between items-center text-xs">
-                  <div>
-                    <span className="text-[10px] text-slate-500 block">DEPOSIT</span>
-                    <span className="text-slate-200 font-bold">{currentStakeSol} SOL</span>
-                  </div>
-                  <div className="text-right">
-                    <span className="text-[10px] text-cyan-400 block font-semibold">POT PRIZE</span>
-                    <span className="text-cyan-300 font-bold text-sm">
-                      {totalPotCoins} Coins ({totalPotSol} SOL)
-                    </span>
-                  </div>
-                </div>
-
-                <Button
-                  className="w-full bg-cyan-500 hover:bg-cyan-400 active:bg-cyan-600 text-slate-950 font-black py-5 text-xs rounded-lg shadow-[0_0_15px_rgba(6,182,212,0.35)] transition-all cursor-pointer tracking-wider"
-                  disabled={isCreating}
-                  onClick={handleCreateRoom}
-                >
-                  {isCreating ? 'CREATING ROOM...' : `CREATE ROOM & GET CODE · ${currentStakeSol} SOL`}
-                </Button>
-              </div>
-            )}
-
-            {/* TAB 3: JOIN BY CODE */}
-            {activeTab === 'join' && (
-              <form onSubmit={handleJoinByCode} className="space-y-4 pt-1">
-                <p className="text-xs text-slate-400 leading-relaxed">
-                  Enter an 8-character room code or paste the room address to join.
-                </p>
-
-                <div className="relative">
-                  <Input
-                    id="joinCode"
-                    placeholder="e.g. SD-8F9A2B or room PDA"
-                    value={joinCodeInput}
-                    onChange={(e) => setJoinCodeInput(e.target.value)}
-                    className="font-mono text-xs uppercase bg-[#05090f] border-amber-500/40 text-amber-300 placeholder:text-slate-600 rounded py-2.5 pl-3 pr-9 tracking-wider"
-                  />
-                  <Search className="absolute right-3 top-2.5 h-4 w-4 text-amber-400/60 pointer-events-none" />
-                </div>
-
-                <Button
-                  type="submit"
-                  className="w-full bg-amber-500 hover:bg-amber-400 active:bg-amber-600 text-slate-950 font-black py-5 text-xs rounded-lg shadow-[0_0_15px_rgba(245,158,11,0.35)] transition-all cursor-pointer tracking-wider"
-                  disabled={isSearchingCode || !joinCodeInput.trim()}
-                >
-                  {isSearchingCode ? 'RESOLVING ROOM...' : 'ENTER ROOM'}
-                </Button>
-              </form>
-            )}
-          </div>
-
-          {/* Minimal Subtle Trust Bar */}
-          <div className="flex items-center justify-center gap-2 text-[10px] text-slate-500 text-center">
-            <ShieldCheck className="h-3.5 w-3.5 text-emerald-400/70" />
-            <span>Non-custodial PDA escrow · Verified Rust logic · 5s timeout protection</span>
+            {/* Subtle Security Trust Line */}
+            <div className="pt-3 border-t border-slate-800/80 flex items-center justify-center gap-2 text-[10px] text-slate-500 text-center font-mono">
+              <ShieldCheck className="h-3.5 w-3.5 text-emerald-400/70" />
+              <span>Non-custodial PDA escrow · Verified Rust logic · 5s timeout protection</span>
+            </div>
           </div>
         </div>
       </div>
