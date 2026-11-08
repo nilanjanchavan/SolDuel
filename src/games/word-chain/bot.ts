@@ -541,17 +541,15 @@ const FALLBACK_VOCABULARY: string[] = [
 ]
 
 let cachedWords: string[] | null = null
+let pendingDictionaryLoad: Promise<string[]> | null = null
 
-// Auto-populate cache in browser environments
-if (typeof window !== 'undefined') {
-  fetch('/dictionary/words.json')
-    .then((res) => (res.ok ? res.json() : null))
-    .then((words) => {
-      if (Array.isArray(words) && words.length > 0) {
-        setDictionaryCache(words)
-      }
-    })
-    .catch(() => {})
+/**
+ * Directly sets the dictionary cache with the complete word list.
+ *
+ * @param words Complete array of valid lowercase dictionary words
+ */
+export function setDictionaryCache(words: string[]): void {
+  cachedWords = words
 }
 
 /**
@@ -581,33 +579,34 @@ export function loadDictionarySync(): string[] {
 /**
  * Asynchronously loads the complete dictionary in browser environments,
  * caching the result for subsequent synchronous bot turns.
+ * Reuses the in-flight request if one is already in progress.
  */
 export async function loadDictionaryAsync(): Promise<string[]> {
   if (cachedWords) return cachedWords
+  if (pendingDictionaryLoad) return pendingDictionaryLoad
+
   if (typeof window !== 'undefined') {
-    try {
-      const res = await fetch('/dictionary/words.json')
-      if (res.ok) {
-        const words = await res.json()
+    pendingDictionaryLoad = fetch('/dictionary/words.json')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((words) => {
         if (Array.isArray(words) && words.length > 0) {
           cachedWords = words
           return words
         }
-      }
-    } catch {
-      // Fallback
-    }
+        return loadDictionarySync()
+      })
+      .catch(() => loadDictionarySync())
+      .finally(() => {
+        pendingDictionaryLoad = null
+      })
+    return pendingDictionaryLoad
   }
   return loadDictionarySync()
 }
 
-/**
- * Directly sets the dictionary cache with the complete word list.
- *
- * @param words Complete array of valid lowercase dictionary words
- */
-export function setDictionaryCache(words: string[]): void {
-  cachedWords = words
+// Auto-populate cache in browser environments
+if (typeof window !== 'undefined') {
+  loadDictionaryAsync().catch(() => {})
 }
 
 export function getRequiredPrefix(lastWord: string): string {

@@ -172,7 +172,8 @@ export const wordChainEngine: GameEngine<WordChainState, WordChainMove> = {
     const view = new DataView(buf.buffer, buf.byteOffset, buf.byteLength)
     const currentTurn = (buf[OFFSET_TURN] === 1 ? 1 : 0) as 0 | 1
     const strikes: [number, number] = [buf[OFFSET_STRIKES_0], buf[OFFSET_STRIKES_1]]
-    const turnStartTs = Number(view.getBigInt64(OFFSET_TURN_START_TS, true))
+    const rawTurnStartTs = Number(view.getBigInt64(OFFSET_TURN_START_TS, true))
+    const turnStartTs = rawTurnStartTs > 0 && rawTurnStartTs < 1e11 ? rawTurnStartTs * 1000 : rawTurnStartTs
     const lastWordLen = Math.min(buf[OFFSET_LAST_WORD_LEN], 32)
     const lastWord = new TextDecoder().decode(buf.slice(OFFSET_LAST_WORD, OFFSET_LAST_WORD + lastWordLen))
     const wordsCount = view.getUint16(OFFSET_WORDS_COUNT, true)

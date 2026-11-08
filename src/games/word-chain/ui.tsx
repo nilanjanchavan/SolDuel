@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { WordChainMove, WordChainState } from './types'
 import { MAX_STRIKES, WORD_CHAIN_TIMEOUT_SECS } from './constants'
-import { getRequiredPrefix, setDictionaryCache } from './bot'
+import { getRequiredPrefix, loadDictionaryAsync } from './bot'
 
 export interface WordChainBoardProps {
   state: WordChainState
@@ -24,16 +24,7 @@ export const WordChainBoard: React.FC<WordChainBoardProps> = ({ state, me, onMov
 
   // Preload full dictionary in browser environments
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      fetch('/dictionary/words.json')
-        .then((res) => (res.ok ? res.json() : null))
-        .then((words) => {
-          if (Array.isArray(words) && words.length > 0) {
-            setDictionaryCache(words)
-          }
-        })
-        .catch(() => {})
-    }
+    loadDictionaryAsync().catch(() => {})
   }, [])
 
   // Active 1-second interval to update remaining time
@@ -51,7 +42,9 @@ export const WordChainBoard: React.FC<WordChainBoardProps> = ({ state, me, onMov
     }
   }, [])
 
-  const turnStart = state.turnStartTs > 0 ? state.turnStartTs : nowTs
+  const turnStart = state.turnStartTs > 0
+    ? (state.turnStartTs < 1e11 ? state.turnStartTs * 1000 : state.turnStartTs)
+    : nowTs
   const elapsedSecs = Math.max(0, Math.floor((nowTs - turnStart) / 1000))
   const remainingSecs = Math.max(0, WORD_CHAIN_TIMEOUT_SECS - elapsedSecs)
   const timerRatio = Math.max(0, Math.min(1, remainingSecs / WORD_CHAIN_TIMEOUT_SECS))
