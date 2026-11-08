@@ -19,10 +19,12 @@ const CHOICES: { id: RpsChoice; label: string; icon: string }[] = [
 
 function generateSalt(): Uint8Array {
   const salt = new Uint8Array(32)
-  if (typeof window !== 'undefined' && window.crypto) {
+  if (typeof window !== 'undefined' && window.crypto && window.crypto.getRandomValues) {
     window.crypto.getRandomValues(salt)
+  } else if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
+    crypto.getRandomValues(salt)
   } else {
-    for (let i = 0; i < 32; i++) salt[i] = Math.floor(Math.random() * 256)
+    throw new Error('Secure randomness unavailable for commit salt generation')
   }
   return salt
 }
@@ -56,8 +58,15 @@ function loadSecret(
     const raw = window.sessionStorage.getItem(getStorageKey(room, round, me))
     if (!raw) return null
     const parsed = JSON.parse(raw)
+    if (typeof parsed.choice !== 'number' || !Number.isInteger(parsed.choice) || parsed.choice < 0 || parsed.choice > 2) {
+      return null
+    }
+    if (typeof parsed.saltHex !== 'string' || !/^[0-9a-fA-F]{64}$/.test(parsed.saltHex)) {
+      return null
+    }
     const salt = new Uint8Array(parsed.saltHex.match(/.{1,2}/g).map((byte: string) => parseInt(byte, 16)))
-    return { choice: parsed.choice, salt }
+    if (salt.length !== 32) return null
+    return { choice: parsed.choice as RpsChoice, salt }
   } catch {
     return null
   }
@@ -71,6 +80,7 @@ function clearSecret(room: Uint8Array | null, round: number, me: number) {
 }
 
 export function RpsBoard({ state, me, onMove, disabled }: RpsBoardProps) {
+  const [committing, setCommitting] = useState(false)
   const [selectedChoice, setSelectedChoice] = useState<RpsChoice | null>(() => {
     const restored = loadSecret(state.room, state.round, me)
     return restored ? restored.choice : null
@@ -98,16 +108,22 @@ export function RpsBoard({ state, me, onMove, disabled }: RpsBoardProps) {
   const oppRevealDone = state.reveals[opponent]
 
   const handleSelectChoice = (c: RpsChoice) => {
-    if (disabled || myCommitDone || state.phase !== 'commit') return
-    const salt = generateSalt()
-    setSelectedChoice(c)
-    setMySalt(salt)
-    saveSecret(state.room, state.round, me, c, salt)
+    if (disabled || myCommitDone || committing || state.phase !== 'commit') return
+    setCommitting(true)
+    try {
+      const salt = generateSalt()
+      setSelectedChoice(c)
+      setMySalt(salt)
+      saveSecret(state.room, state.round, me, c, salt)
 
-    const room = state.room || new Uint8Array(32)
-    const hash = computeRpsHash(room, me, c, salt)
-    recordHumanMove(c)
-    onMove({ type: 'commit', room, hash })
+      const room = state.room || new Uint8Array(32)
+      const hash = computeRpsHash(room, me, c, salt)
+      onMove({ type: 'commit', room, hash })
+    } catch (e: any) {
+      setErrorMessage(e?.message || 'Failed to generate commit')
+    } finally {
+      setCommitting(false)
+    }
   }
 
   const handleReveal = () => {
@@ -131,6 +147,7 @@ export function RpsBoard({ state, me, onMove, disabled }: RpsBoardProps) {
     }
 
     setErrorMessage(null)
+    recordHumanMove(choice)
     onMove({ type: 'reveal', choice, salt })
   }
 

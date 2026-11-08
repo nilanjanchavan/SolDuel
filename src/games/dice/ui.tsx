@@ -15,10 +15,12 @@ const DIE_FACES = ['', '⚀', '⚁', '⚂', '⚃', '⚄', '⚅']
 
 function generateSalt(): Uint8Array {
   const salt = new Uint8Array(32)
-  if (typeof window !== 'undefined' && window.crypto) {
+  if (typeof window !== 'undefined' && window.crypto && window.crypto.getRandomValues) {
     window.crypto.getRandomValues(salt)
+  } else if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
+    crypto.getRandomValues(salt)
   } else {
-    for (let i = 0; i < 32; i++) salt[i] = Math.floor(Math.random() * 256)
+    throw new Error('Secure randomness unavailable for commit salt generation')
   }
   return salt
 }
@@ -40,8 +42,8 @@ function saveSecret(room: Uint8Array | null, round: number, me: number, choice: 
   if (typeof window === 'undefined') return
   try {
     const saltHex = Array.from(salt)
-      .map((b) => b.toString(16).padStart(2, '0'))
-      .join('')
+        .map((b) => b.toString(16).padStart(2, '0'))
+        .join('')
     window.sessionStorage.setItem(getStorageKey(room, round, me), JSON.stringify({ choice, saltHex }))
   } catch {}
 }
@@ -52,7 +54,14 @@ function loadSecret(room: Uint8Array | null, round: number, me: number): { choic
     const raw = window.sessionStorage.getItem(getStorageKey(room, round, me))
     if (!raw) return null
     const parsed = JSON.parse(raw)
+    if (typeof parsed.choice !== 'number' || !Number.isInteger(parsed.choice) || parsed.choice < 1 || parsed.choice > 6) {
+      return null
+    }
+    if (typeof parsed.saltHex !== 'string' || !/^[0-9a-fA-F]{64}$/.test(parsed.saltHex)) {
+      return null
+    }
     const salt = new Uint8Array(parsed.saltHex.match(/.{1,2}/g).map((byte: string) => parseInt(byte, 16)))
+    if (salt.length !== 32) return null
     return { choice: parsed.choice, salt }
   } catch {
     return null
@@ -67,6 +76,7 @@ function clearSecret(room: Uint8Array | null, round: number, me: number) {
 }
 
 export function DiceBoard({ state, me, onMove, disabled }: DiceBoardProps) {
+  const [committing, setCommitting] = useState(false)
   const [selectedRoll, setSelectedRoll] = useState<number | null>(() => {
     const restored = loadSecret(state.room, state.round, me)
     return restored ? restored.choice : null
@@ -94,17 +104,23 @@ export function DiceBoard({ state, me, onMove, disabled }: DiceBoardProps) {
   const oppRevealDone = state.reveals[opponent]
 
   const handleRollDice = (choice?: number) => {
-    if (disabled || myCommitDone || state.phase !== 'commit') return
-    const roll = choice || getRandomRoll()
-    setSelectedRoll(roll)
+    if (disabled || myCommitDone || committing || state.phase !== 'commit') return
+    setCommitting(true)
+    try {
+      const roll = choice || getRandomRoll()
+      const salt = generateSalt()
+      setSelectedRoll(roll)
+      setMySalt(salt)
+      saveSecret(state.room, state.round, me, roll, salt)
 
-    const salt = generateSalt()
-    setMySalt(salt)
-    saveSecret(state.room, state.round, me, roll, salt)
-
-    const room = state.room || new Uint8Array(32)
-    const hash = computeDiceHash(room, me, roll, salt)
-    onMove({ type: 'commit', room, hash })
+      const room = state.room || new Uint8Array(32)
+      const hash = computeDiceHash(room, me, roll, salt)
+      onMove({ type: 'commit', room, hash })
+    } catch (e: any) {
+      setErrorMessage(e?.message || 'Failed to generate roll commitment')
+    } finally {
+      setCommitting(false)
+    }
   }
 
   const handleReveal = () => {

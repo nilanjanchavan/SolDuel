@@ -35,6 +35,21 @@ export const diceEngine: GameEngine<DiceState, DiceMove> = {
       if (s.commits[p]) {
         throw new Error(`Player ${p} already committed`)
       }
+      if (!m.room || m.room.length !== 32 || !m.hash || m.hash.length !== 32) {
+        throw new Error('Invalid commit payload: room and hash must each be 32 bytes')
+      }
+      if (s.room) {
+        let roomMismatch = false
+        for (let i = 0; i < 32; i++) {
+          if (s.room[i] !== m.room[i]) {
+            roomMismatch = true
+            break
+          }
+        }
+        if (roomMismatch) {
+          throw new Error('Commit room does not match game room')
+        }
+      }
 
       const newCommits: [boolean, boolean] = [...s.commits]
       newCommits[p] = true
@@ -64,6 +79,14 @@ export const diceEngine: GameEngine<DiceState, DiceMove> = {
 
       // Validate choice is a 6-sided die roll (1..=6)
       if (!Number.isInteger(m.choice) || m.choice < 1 || m.choice > 6) {
+        return {
+          state: s,
+          outcome: { win: (1 - p) as 0 | 1 },
+        }
+      }
+
+      // Validate salt length (must be 32 bytes, else forfeit)
+      if (!m.salt || m.salt.length !== 32) {
         return {
           state: s,
           outcome: { win: (1 - p) as 0 | 1 },

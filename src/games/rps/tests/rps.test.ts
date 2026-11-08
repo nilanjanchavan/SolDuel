@@ -90,7 +90,12 @@ describe('RPS Engine and Vectors', () => {
     expect(r0.type).toBe('reveal')
     expect(r1.type).toBe('reveal')
 
-    const res1 = rpsEngine.apply(rpsEngine.apply(s1_committed, 0, r0).state, 1, r1)
+    const step1 = rpsEngine.apply(s1_committed, 0, r0)
+    expect(step1.outcome).toBe('continue')
+    expect(step1.state.reveals[0]).toBe(true)
+
+    const res1 = rpsEngine.apply(step1.state, 1, r1)
+    expect(res1.state).not.toBe(step1.state)
     expect(['continue', 'draw', { win: 0 }, { win: 1 }]).toContainEqual(res1.outcome)
 
     // Match 2: Medium (P0) vs Hard (P1) on a distinct round to prevent secret collision
@@ -103,7 +108,13 @@ describe('RPS Engine and Vectors', () => {
     const s2_committed = rpsEngine.apply(rpsEngine.apply(state2, 0, mMed0).state, 1, mHard1).state
     const rMed0 = mediumBot(s2_committed, 0)
     const rHard1 = hardBot(s2_committed, 1)
-    const res2 = rpsEngine.apply(rpsEngine.apply(s2_committed, 0, rMed0).state, 1, rHard1)
+
+    const step2 = rpsEngine.apply(s2_committed, 0, rMed0)
+    expect(step2.outcome).toBe('continue')
+    expect(step2.state.reveals[0]).toBe(true)
+
+    const res2 = rpsEngine.apply(step2.state, 1, rHard1)
+    expect(res2.state).not.toBe(step2.state)
     expect(['continue', 'draw', { win: 0 }, { win: 1 }]).toContainEqual(res2.outcome)
   })
 

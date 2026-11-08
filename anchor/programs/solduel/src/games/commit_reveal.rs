@@ -1,5 +1,6 @@
 use anchor_lang::prelude::*;
 use sha2::{Digest, Sha256};
+use crate::errors::SolduelError;
 
 pub const OFFSET_ROOM: usize = 0; // 32 bytes: MatchRoom pubkey
 pub const OFFSET_ROUND: usize = 32; // 1 byte
@@ -79,7 +80,10 @@ impl CommitReveal {
     }
 
     /// Resets commits and reveals in preparation for a subsequent round.
-    pub fn reset_round(state: &mut [u8]) {
+    pub fn reset_round(state: &mut [u8]) -> Result<()> {
+        if state.len() < COMMIT_REVEAL_STATE_LEN {
+            return err!(SolduelError::MathOverflow);
+        }
         state[OFFSET_PHASE] = PHASE_COMMIT;
         state[OFFSET_COMMIT_0_SET] = 0;
         state[OFFSET_COMMIT_1_SET] = 0;
@@ -89,12 +93,27 @@ impl CommitReveal {
         state[OFFSET_REVEAL_1_SET] = 0;
         state[OFFSET_CHOICE_0] = 255;
         state[OFFSET_CHOICE_1] = 255;
+        Ok(())
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_reset_round() {
+        let mut state = [1u8; 1024];
+        assert!(CommitReveal::reset_round(&mut state).is_ok());
+        assert_eq!(state[OFFSET_PHASE], PHASE_COMMIT);
+        assert_eq!(state[OFFSET_COMMIT_0_SET], 0);
+        assert_eq!(state[OFFSET_COMMIT_1_SET], 0);
+        assert_eq!(state[OFFSET_CHOICE_0], 255);
+        assert_eq!(state[OFFSET_CHOICE_1], 255);
+
+        let mut short_state = [0u8; 50];
+        assert!(CommitReveal::reset_round(&mut short_state).is_err());
+    }
 
     #[test]
     fn test_compute_and_verify_hash() {

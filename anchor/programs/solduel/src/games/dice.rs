@@ -64,11 +64,12 @@ impl Game for DiceDuel {
             commit_hash.copy_from_slice(&data[33..65]);
 
             // If room is unset in state, set it from the first commit; otherwise verify matching room
-            let mut stored_room = [0u8; 32];
-            stored_room.copy_from_slice(&state[OFFSET_ROOM..OFFSET_ROOM + 32]);
-            if stored_room == [0u8; 32] {
+            let is_room_set = state[OFFSET_ROUND] > 0
+                || state[OFFSET_COMMIT_0_SET] == 1
+                || state[OFFSET_COMMIT_1_SET] == 1;
+            if !is_room_set {
                 state[OFFSET_ROOM..OFFSET_ROOM + 32].copy_from_slice(&action_room);
-            } else if stored_room != action_room {
+            } else if state[OFFSET_ROOM..OFFSET_ROOM + 32] != action_room {
                 return err!(SolduelError::InvalidGame);
             }
 
@@ -108,7 +109,7 @@ impl Game for DiceDuel {
             salt.copy_from_slice(&data[2..34]);
 
             // Validate choice is a valid 6-sided die roll (1..=6)
-            if choice < 1 || choice > 6 {
+            if !(1..=6).contains(&choice) {
                 // Invalid choice forfeits
                 return Ok(Outcome::Win(1 - player));
             }
@@ -167,7 +168,7 @@ impl Game for DiceDuel {
                     }
 
                     state[OFFSET_ROUND] = state[OFFSET_ROUND].saturating_add(1);
-                    CommitReveal::reset_round(state);
+                    CommitReveal::reset_round(state)?;
                     Ok(Outcome::Continue)
                 }
             } else {

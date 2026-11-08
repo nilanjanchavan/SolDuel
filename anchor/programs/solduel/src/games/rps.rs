@@ -87,11 +87,12 @@ impl Game for RockPaperScissors {
             commit_hash.copy_from_slice(&data[33..65]);
 
             // If room is unset in state, set it from the first commit; otherwise verify matching room
-            let mut stored_room = [0u8; 32];
-            stored_room.copy_from_slice(&state[OFFSET_ROOM..OFFSET_ROOM + 32]);
-            if stored_room == [0u8; 32] {
+            let is_room_set = state[OFFSET_ROUND] > 0
+                || state[OFFSET_COMMIT_0_SET] == 1
+                || state[OFFSET_COMMIT_1_SET] == 1;
+            if !is_room_set {
                 state[OFFSET_ROOM..OFFSET_ROOM + 32].copy_from_slice(&action_room);
-            } else if stored_room != action_room {
+            } else if state[OFFSET_ROOM..OFFSET_ROOM + 32] != action_room {
                 return err!(SolduelError::InvalidGame);
             }
 
@@ -190,7 +191,7 @@ impl Game for RockPaperScissors {
                     }
 
                     state[OFFSET_ROUND] = state[OFFSET_ROUND].saturating_add(1);
-                    CommitReveal::reset_round(state);
+                    CommitReveal::reset_round(state)?;
                     Ok(Outcome::Continue)
                 } else if Self::beats(c0, c1) {
                     // Player 0 wins round
@@ -213,7 +214,7 @@ impl Game for RockPaperScissors {
                         }
                     }
 
-                    CommitReveal::reset_round(state);
+                    CommitReveal::reset_round(state)?;
                     Ok(Outcome::Continue)
                 } else {
                     // Player 1 wins round
@@ -236,7 +237,7 @@ impl Game for RockPaperScissors {
                         }
                     }
 
-                    CommitReveal::reset_round(state);
+                    CommitReveal::reset_round(state)?;
                     Ok(Outcome::Continue)
                 }
             } else {

@@ -1,12 +1,29 @@
 import { sha256 } from 'js-sha256'
 import { RpsChoice, RpsMove, RpsState } from './types'
 
-// Stored bot secrets per player per round
+// Stored bot secrets per player per round / commit hash
 const botSecrets = new Map<string, { choice: RpsChoice; salt: Uint8Array }>()
 
 // History of player moves to counter habits
 const playerMoveHistory: RpsChoice[] = []
 
+function bytesToHex(bytes: Uint8Array): string {
+  let hex = ''
+  for (let i = 0; i < bytes.length; i++) {
+    hex += bytes[i].toString(16).padStart(2, '0')
+  }
+  return hex
+}
+
+/**
+ * Computes the SHA-256 commit hash for rock-paper-scissors: room || player || choice || salt (66 bytes).
+ *
+ * @param room 32-byte room address
+ * @param player Player index 0 or 1
+ * @param choice RpsChoice (0=Rock, 1=Paper, 2=Scissors)
+ * @param salt 32-byte random salt
+ * @returns 32-byte SHA-256 commit hash
+ */
 export function computeRpsHash(room: Uint8Array, player: 0 | 1, choice: RpsChoice, salt: Uint8Array): Uint8Array {
   const preimage = new Uint8Array(32 + 2 + 32)
   preimage.set(room, 0)
@@ -21,6 +38,11 @@ export function computeRpsHash(room: Uint8Array, player: 0 | 1, choice: RpsChoic
   return out
 }
 
+/**
+ * Records a human move to the history buffer for predictive analysis by the hard bot.
+ *
+ * @param choice RpsChoice played by the human
+ */
 export function recordHumanMove(choice: RpsChoice): void {
   playerMoveHistory.push(choice)
   if (playerMoveHistory.length > 20) {
@@ -70,6 +92,12 @@ function getHardChoice(history: RpsChoice[]): RpsChoice {
   return ((lastMove + 1) % 3) as RpsChoice
 }
 
+/**
+ * Selects an RPS choice for the bot according to the given difficulty level.
+ *
+ * @param level 'easy', 'medium', or 'hard'
+ * @returns RpsChoice (0=Rock, 1=Paper, 2=Scissors)
+ */
 export function getBotChoice(level: 'easy' | 'medium' | 'hard'): RpsChoice {
   if (level === 'easy') {
     return Math.floor(Math.random() * 3) as RpsChoice
@@ -86,6 +114,14 @@ export function getBotChoice(level: 'easy' | 'medium' | 'hard'): RpsChoice {
   return getHardChoice(playerMoveHistory)
 }
 
+/**
+ * Computes the next RPS move (commit or reveal) for the bot.
+ *
+ * @param level Bot difficulty level
+ * @param state Current RPS game state
+ * @param p Bot's player index (0 or 1)
+ * @returns RpsMove (commit or reveal)
+ */
 export function getBotRpsMove(level: 'easy' | 'medium' | 'hard', state: RpsState, p: 0 | 1): RpsMove {
   const room = state.room || new Uint8Array(32)
   const secretKey = `${state.round}-${p}`
@@ -96,14 +132,17 @@ export function getBotRpsMove(level: 'easy' | 'medium' | 'hard', state: RpsState
     if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
       crypto.getRandomValues(salt)
     } else {
-      for (let i = 0; i < 32; i++) salt[i] = Math.floor(Math.random() * 256)
+      throw new Error('Secure randomness unavailable for RPS bot salt generation')
     }
 
-    botSecrets.set(secretKey, { choice, salt })
     const hash = computeRpsHash(room, p, choice, salt)
+    const hashHex = bytesToHex(hash)
+    botSecrets.set(secretKey, { choice, salt })
+    botSecrets.set(hashHex, { choice, salt })
     return { type: 'commit', room, hash }
   } else {
-    const stored = botSecrets.get(secretKey)
+    const hashHex = state.commitHashes?.[p] ? bytesToHex(state.commitHashes[p]!) : null
+    const stored = (hashHex && botSecrets.get(hashHex)) || botSecrets.get(secretKey)
     if (stored) {
       return { type: 'reveal', choice: stored.choice, salt: stored.salt }
     }
