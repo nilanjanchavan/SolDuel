@@ -163,9 +163,12 @@ export const diceEngine: GameEngine<DiceState, DiceMove> = {
       }
 
       // Both revealed: derive rolls from entropy of both players
+      if (!newSalts[0] || !newSalts[1]) {
+        throw new Error('Missing revealed salt for roll derivation')
+      }
       const room = s.room || new Uint8Array(32)
-      const salt0 = newSalts[0]!
-      const salt1 = newSalts[1]!
+      const salt0 = newSalts[0]
+      const salt1 = newSalts[1]
       const c0 = newChoices[0]
       const c1 = newChoices[1]
       const r0 = deriveDiceRoll(room, salt0, salt1, c0, c1, 0)
@@ -230,8 +233,8 @@ export const diceEngine: GameEngine<DiceState, DiceMove> = {
   },
 
   decodeState(buf: Uint8Array): DiceState {
-    if (buf.length < 107) {
-      throw new Error(`Buffer too short for Dice state: expected at least 107 bytes, got ${buf.length}`)
+    if (buf.length < 172) {
+      throw new Error(`Buffer too short for Dice state: expected at least 172 bytes, got ${buf.length}`)
     }
     const room = buf.slice(0, 32)
     const round = buf[32]
@@ -247,8 +250,8 @@ export const diceEngine: GameEngine<DiceState, DiceMove> = {
     const roll0 = buf[104]
     const roll1 = buf[105]
     const drawCount = buf[106]
-    const salt0 = buf.length >= 171 && reveal0 ? buf.slice(107, 139) : null
-    const salt1 = buf.length >= 171 && reveal1 ? buf.slice(139, 171) : null
+    const salt0 = reveal0 ? buf.slice(107, 139) : null
+    const salt1 = reveal1 ? buf.slice(139, 171) : null
 
     return {
       round,
