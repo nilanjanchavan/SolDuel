@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { WordChainMove, WordChainState } from './types'
 import { MAX_STRIKES, WORD_CHAIN_TIMEOUT_SECS } from './constants'
-import { getRequiredPrefix } from './bot'
+import { getRequiredPrefix, setDictionaryCache } from './bot'
 
 export interface WordChainBoardProps {
   state: WordChainState
@@ -21,6 +21,20 @@ export const WordChainBoard: React.FC<WordChainBoardProps> = ({ state, me, onMov
 
   const isMyTurn = state.currentTurn === me && !disabled
   const reqPrefix = useMemo(() => getRequiredPrefix(state.lastWord), [state.lastWord])
+
+  // Preload full dictionary in browser environments
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      fetch('/dictionary/words.json')
+        .then((res) => (res.ok ? res.json() : null))
+        .then((words) => {
+          if (Array.isArray(words) && words.length > 0) {
+            setDictionaryCache(words)
+          }
+        })
+        .catch(() => {})
+    }
+  }, [])
 
   // Active 1-second interval to update remaining time
   useEffect(() => {

@@ -101,17 +101,32 @@ export const wordChainEngine: GameEngine<WordChainState, WordChainMove> = {
       return awardStrike(s, p)
     }
 
+    const newWordsCount = s.wordsCount + 1
+    const newWordHashes = [...s.wordHashes, hash]
+    const nextTurn = (1 - p) as 0 | 1
+
+    let outcome: Outcome = 'continue'
+    if (newWordsCount >= MAX_WORDS) {
+      if (s.strikes[0] < s.strikes[1]) {
+        outcome = { win: 0 }
+      } else if (s.strikes[1] < s.strikes[0]) {
+        outcome = { win: 1 }
+      } else {
+        outcome = 'draw'
+      }
+    }
+
     // Valid move advances the turn
     return {
       state: {
-        currentTurn: (1 - p) as 0 | 1,
+        currentTurn: nextTurn,
         strikes: s.strikes,
         turnStartTs: Date.now(),
         lastWord: word,
-        wordsCount: s.wordsCount + 1,
-        wordHashes: [...s.wordHashes, hash],
+        wordsCount: newWordsCount,
+        wordHashes: newWordHashes,
       },
-      outcome: 'continue',
+      outcome,
     }
   },
 

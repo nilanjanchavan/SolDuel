@@ -250,6 +250,41 @@ describe('Word Chain Engine & Vectors', () => {
         expect(word.length).toBeGreaterThanOrEqual(3)
         expect(word.startsWith('t')).toBe(true)
       }
+
+      // Test continuation after "cat" (requires "at" start)
+      const rCat = wordChainEngine.apply(wordChainEngine.init(0), 0, 'cat')
+      const moveAfterCat = bot(rCat.state, 1)
+      const wordAfterCat = typeof moveAfterCat === 'string' ? moveAfterCat : moveAfterCat.word
+      expect(wordAfterCat.startsWith('at')).toBe(true)
+      expect(wordAfterCat).not.toBe('atx')
+      expect(wordAfterCat.length).toBeGreaterThanOrEqual(3)
+    })
+
+    it('resolves match at MAX_WORDS word cap with strike-based tiebreaker or draw', () => {
+      // 1. Equal strikes -> draw
+      const stateDraw = wordChainEngine.init(0)
+      stateDraw.wordsCount = 99
+      stateDraw.strikes = [1, 1]
+      stateDraw.lastWord = 'start'
+      const resDraw = wordChainEngine.apply(stateDraw, 0, 'train')
+      expect(resDraw.outcome).toBe('draw')
+      expect(resDraw.state.wordsCount).toBe(100)
+
+      // 2. Player 0 has fewer strikes -> Win(0)
+      const stateWin0 = wordChainEngine.init(0)
+      stateWin0.wordsCount = 99
+      stateWin0.strikes = [0, 2]
+      stateWin0.lastWord = 'start'
+      const resWin0 = wordChainEngine.apply(stateWin0, 0, 'train')
+      expect(resWin0.outcome).toEqual({ win: 0 })
+
+      // 3. Player 1 has fewer strikes -> Win(1)
+      const stateWin1 = wordChainEngine.init(0)
+      stateWin1.wordsCount = 99
+      stateWin1.strikes = [2, 1]
+      stateWin1.lastWord = 'start'
+      const resWin1 = wordChainEngine.apply(stateWin1, 0, 'train')
+      expect(resWin1.outcome).toEqual({ win: 1 })
     })
   })
 })

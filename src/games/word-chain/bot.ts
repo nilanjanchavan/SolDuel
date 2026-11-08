@@ -530,13 +530,34 @@ const FALLBACK_VOCABULARY: string[] = [
   'inlet',
   'intro',
   'onion',
-  'onion',
   'tonic',
   'night',
+  'atoll',
+  'atlas',
+  'atom',
+  'attic',
+  'attack',
+  'attend',
 ]
 
 let cachedWords: string[] | null = null
 
+// Auto-populate cache in browser environments
+if (typeof window !== 'undefined') {
+  fetch('/dictionary/words.json')
+    .then((res) => (res.ok ? res.json() : null))
+    .then((words) => {
+      if (Array.isArray(words) && words.length > 0) {
+        setDictionaryCache(words)
+      }
+    })
+    .catch(() => {})
+}
+
+/**
+ * Loads the dictionary synchronously from disk in Node / server environments,
+ * or returns cached words / fallback vocabulary in the browser.
+ */
 export function loadDictionarySync(): string[] {
   if (cachedWords) return cachedWords
   if (typeof window === 'undefined') {
@@ -557,6 +578,34 @@ export function loadDictionarySync(): string[] {
   return FALLBACK_VOCABULARY
 }
 
+/**
+ * Asynchronously loads the complete dictionary in browser environments,
+ * caching the result for subsequent synchronous bot turns.
+ */
+export async function loadDictionaryAsync(): Promise<string[]> {
+  if (cachedWords) return cachedWords
+  if (typeof window !== 'undefined') {
+    try {
+      const res = await fetch('/dictionary/words.json')
+      if (res.ok) {
+        const words = await res.json()
+        if (Array.isArray(words) && words.length > 0) {
+          cachedWords = words
+          return words
+        }
+      }
+    } catch {
+      // Fallback
+    }
+  }
+  return loadDictionarySync()
+}
+
+/**
+ * Directly sets the dictionary cache with the complete word list.
+ *
+ * @param words Complete array of valid lowercase dictionary words
+ */
 export function setDictionaryCache(words: string[]): void {
   cachedWords = words
 }
