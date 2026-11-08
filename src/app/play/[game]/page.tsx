@@ -15,7 +15,7 @@ interface GameMeta {
   description: string
 }
 
-const GAME_META: Record<GameKind, GameMeta> = {
+const GAME_META: Partial<Record<GameKind, GameMeta>> = {
   [GameKind.Rps]: {
     name: 'Rock Paper Scissors',
     slug: 'rps',
@@ -27,18 +27,6 @@ const GAME_META: Record<GameKind, GameMeta> = {
     slug: 'dice',
     icon: '🎲',
     description: 'Commit-reveal 6-sided dice roll duel, high roll wins',
-  },
-  [GameKind.WordChain]: {
-    name: 'Word Chain',
-    slug: 'word-chain',
-    icon: '🔤',
-    description: 'Skill game with Merkle dictionary verification, 30s timer & strikes',
-  },
-  [GameKind.ConnectFour]: {
-    name: 'Connect Four',
-    slug: 'connect-four',
-    icon: '🔴',
-    description: 'Classic 7x6 tactical gravity grid',
   },
 }
 
@@ -52,12 +40,6 @@ function parseGameKind(slug: string | undefined): GameKind {
     case 'dice':
     case 'dice-duel':
       return GameKind.Dice
-    case 'word-chain':
-    case 'wordchain':
-      return GameKind.WordChain
-    case 'connect-four':
-    case 'connectfour':
-      return GameKind.ConnectFour
     default:
       notFound()
   }
@@ -227,7 +209,7 @@ export default function PracticeGamePage() {
   const gameSlug = Array.isArray(params?.game) ? params.game[0] : params?.game
 
   const selectedKind = useMemo(() => parseGameKind(gameSlug), [gameSlug])
-  const gameInfo = GAME_META[selectedKind]
+  const gameInfo = GAME_META[selectedKind] || GAME_META[GameKind.Rps]!
   const gameRecord = GAME_REGISTRY[selectedKind]
 
   const [difficulty, setDifficulty] = useState<Difficulty>('medium')
@@ -272,6 +254,7 @@ export default function PracticeGamePage() {
         {/* Game Switcher Tabs */}
         <div className="flex flex-wrap gap-2">
           {Object.entries(GAME_META).map(([kindKey, meta]) => {
+            if (!meta) return null
             const kindNum = Number(kindKey) as GameKind
             const isCurrent = kindNum === selectedKind
             return (
