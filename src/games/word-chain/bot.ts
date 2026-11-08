@@ -541,6 +541,7 @@ const FALLBACK_VOCABULARY: string[] = [
 ]
 
 let cachedWords: string[] | null = null
+let cachedWordSet: Set<string> | null = null
 let pendingDictionaryLoad: Promise<string[]> | null = null
 
 /**
@@ -550,6 +551,7 @@ let pendingDictionaryLoad: Promise<string[]> | null = null
  */
 export function setDictionaryCache(words: string[]): void {
   cachedWords = words
+  cachedWordSet = new Set(words.map((w) => w.toLowerCase()))
 }
 
 /**
@@ -567,13 +569,17 @@ export function loadDictionarySync(): string[] {
       const p = path.join(process.cwd(), 'public', 'dictionary', 'words.json')
       if (fs.existsSync(p)) {
         cachedWords = JSON.parse(fs.readFileSync(p, 'utf-8'))
+        cachedWordSet = new Set(cachedWords!.map((w) => w.toLowerCase()))
         return cachedWords!
       }
     } catch {
       // Fallback
     }
   }
-  return FALLBACK_VOCABULARY
+  if (!cachedWordSet) {
+    cachedWordSet = new Set(FALLBACK_VOCABULARY)
+  }
+  return cachedWords || FALLBACK_VOCABULARY
 }
 
 /**
@@ -591,6 +597,7 @@ export async function loadDictionaryAsync(): Promise<string[]> {
       .then((words) => {
         if (Array.isArray(words) && words.length > 0) {
           cachedWords = words
+          cachedWordSet = new Set(words.map((w: string) => w.toLowerCase()))
           return words
         }
         return loadDictionarySync()
@@ -602,6 +609,35 @@ export async function loadDictionaryAsync(): Promise<string[]> {
     return pendingDictionaryLoad
   }
   return loadDictionarySync()
+}
+
+/**
+ * Registers words into the active dictionary cache (e.g. from fetched shards).
+ */
+export function registerDictionaryWords(words: string[] | Record<string, unknown>): void {
+  if (!cachedWordSet) {
+    cachedWordSet = new Set(FALLBACK_VOCABULARY)
+  }
+  if (Array.isArray(words)) {
+    for (const w of words) cachedWordSet.add(w.toLowerCase())
+  } else if (words && typeof words === 'object') {
+    for (const w of Object.keys(words)) cachedWordSet.add(w.toLowerCase())
+  }
+}
+
+/**
+ * Checks whether a word exists in the dictionary.
+ */
+export function isWordInDictionary(word: string): boolean {
+  if (!word) return false
+  const w = word.trim().toLowerCase()
+  if (!cachedWordSet) {
+    loadDictionarySync()
+  }
+  if (cachedWordSet && cachedWordSet.size > 0) {
+    return cachedWordSet.has(w)
+  }
+  return false
 }
 
 // Auto-populate cache in browser environments

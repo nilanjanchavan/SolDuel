@@ -142,6 +142,23 @@ describe('Word Chain Engine & Vectors', () => {
       expect(r1.state.currentTurn).toBe(1)
     })
 
+    it('awards a strike when submitting words that do not exist in the dictionary', () => {
+      const state = wordChainEngine.init(0)
+
+      // P0 plays a nonsense word that starts with valid letters but does not exist
+      const r0 = wordChainEngine.apply(state, 0, 'hexyz')
+      expect(r0.state.strikes).toEqual([1, 0])
+      expect(r0.state.lastWord).toBe('') // Word was not accepted
+      expect(r0.state.currentTurn).toBe(0) // Turn remains with P0
+      expect(r0.outcome).toBe('continue')
+
+      // P0 plays a real word -> accepted
+      const r1 = wordChainEngine.apply(r0.state, 0, 'hello')
+      expect(r1.state.strikes).toEqual([1, 0]) // Strike count preserved
+      expect(r1.state.lastWord).toBe('hello')
+      expect(r1.state.currentTurn).toBe(1) // Turn switched to P1
+    })
+
     it('awards win to opponent when 4 strikes are accumulated', () => {
       let state = wordChainEngine.init(0)
 

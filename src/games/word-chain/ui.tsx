@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { WordChainMove, WordChainState } from './types'
 import { MAX_STRIKES, WORD_CHAIN_TIMEOUT_SECS } from './constants'
-import { getRequiredPrefix, loadDictionaryAsync } from './bot'
+import { getRequiredPrefix, loadDictionaryAsync, registerDictionaryWords, isWordInDictionary } from './bot'
 
 export interface WordChainBoardProps {
   state: WordChainState
@@ -15,6 +15,7 @@ export interface WordChainBoardProps {
 export const WordChainBoard: React.FC<WordChainBoardProps> = ({ state, me, onMove, disabled }) => {
   const [inputWord, setInputWord] = useState('')
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
+  const [lastStrikeWord, setLastStrikeWord] = useState<string | null>(null)
   const [isLookingUpProof, setIsLookingUpProof] = useState(false)
   const [nowTs, setNowTs] = useState(() => Date.now())
   const abortControllerRef = useRef<AbortController | null>(null)
@@ -80,6 +81,7 @@ export const WordChainBoard: React.FC<WordChainBoardProps> = ({ state, me, onMov
       abortControllerRef.current = controller
 
       let proof: string[] | undefined = undefined
+      let shardLoaded = false
       try {
         const prefix = cleaned.slice(0, 2)
         let res = await fetch(`/dictionary/shards/${prefix}.json`, { signal: controller.signal })
@@ -88,6 +90,8 @@ export const WordChainBoard: React.FC<WordChainBoardProps> = ({ state, me, onMov
         }
         if (res.ok) {
           const shard = await res.json()
+          registerDictionaryWords(shard)
+          shardLoaded = true
           if (Array.isArray(shard[cleaned])) {
             proof = shard[cleaned]
           }
@@ -109,11 +113,24 @@ export const WordChainBoard: React.FC<WordChainBoardProps> = ({ state, me, onMov
       }
 
       setInputWord('')
+
+      // If proof was found, the word is 100% valid in the ENABLE1 Merkle tree
       if (proof) {
+        setLastStrikeWord(null)
         onMove({ word: cleaned, proof })
-      } else {
-        onMove(cleaned)
+        return
       }
+
+      // If shard didn't load (offline) but word exists in dictionary cache
+      if (!shardLoaded && isWordInDictionary(cleaned)) {
+        setLastStrikeWord(null)
+        onMove(cleaned)
+        return
+      }
+
+      // Word does not exist in the dictionary -> Award Strike!
+      setLastStrikeWord(cleaned)
+      onMove({ word: cleaned, proof: [] })
     },
     [inputWord, isMyTurn, isLookingUpProof, reqPrefix, onMove, state.currentTurn, me, disabled],
   )
@@ -248,6 +265,22 @@ export const WordChainBoard: React.FC<WordChainBoardProps> = ({ state, me, onMov
           </div>
         )}
       </div>
+
+      {/* Strike Alert Banner */}
+      {lastStrikeWord && state.strikes[me] > 0 && (
+        <div className="p-3.5 rounded-xl bg-rose-950/60 border border-rose-500/60 text-rose-200 text-xs font-mono flex items-center justify-between shadow-lg shadow-rose-950/30 motion-safe:animate-pulse">
+          <div className="flex items-center gap-2">
+            <span className="text-base">⚠️</span>
+            <div>
+              <span className="font-bold text-rose-400">STRIKE RECORDED: </span>
+              <span>&ldquo;{lastStrikeWord.toUpperCase()}&rdquo; is not in the ENABLE1 dictionary!</span>
+            </div>
+          </div>
+          <span className="font-black text-rose-400 bg-rose-900/60 px-2.5 py-1 rounded-lg border border-rose-700/60 text-[11px]">
+            {state.strikes[me]} / {MAX_STRIKES} STRIKES
+          </span>
+        </div>
+      )}
 
       {/* Interactive Word Input Form */}
       <form onSubmit={handleSubmit} className="space-y-3">

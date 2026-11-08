@@ -16,7 +16,7 @@ import {
   computeTruncatedHash,
   verifyWordProof,
 } from './constants'
-import { createWordChainBot, getRequiredPrefix } from './bot'
+import { createWordChainBot, getRequiredPrefix, isWordInDictionary } from './bot'
 import { WordChainBoard } from './ui'
 
 export * from './types'
@@ -79,9 +79,14 @@ export const wordChainEngine: GameEngine<WordChainState, WordChainMove> = {
       return awardStrike(s, p)
     }
 
-    // Verify Merkle proof if provided
-    if (typeof m === 'object' && m.proof && m.proof.length > 0) {
+    // Verify Merkle proof or dictionary existence
+    if (typeof m === 'object' && Array.isArray(m.proof) && m.proof.length > 0) {
       const isValid = verifyWordProof(DICTIONARY_MERKLE_ROOT, word, m.proof)
+      if (!isValid) {
+        return awardStrike(s, p)
+      }
+    } else {
+      const isValid = isWordInDictionary(word)
       if (!isValid) {
         return awardStrike(s, p)
       }
