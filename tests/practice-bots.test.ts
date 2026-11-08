@@ -1,4 +1,6 @@
 import { GAME_REGISTRY, GameKind } from '../src/games'
+import { computeRpsHash } from '../src/games/rps/bot'
+import { computeDiceHash } from '../src/games/dice/bot'
 
 describe('Practice Mode Bots and Engines', () => {
   const difficulties = ['easy', 'medium', 'hard'] as const
@@ -67,17 +69,35 @@ describe('Practice Mode Bots and Engines', () => {
         const commitMove = botFn(state, 1)
         expect(commitMove.type).toBe('commit')
 
-        const resCommit = game.engine.apply(state, 1, commitMove)
-        expect(resCommit.state.commits[1]).toBe(true)
+        // 1. Bot commits
+        const res1 = game.engine.apply(state, 1, commitMove)
+        expect(res1.state.commits[1]).toBe(true)
 
-        // Bot reveal
-        const revealState = {
-          ...resCommit.state,
-          phase: 'reveal' as const,
-          commits: [true, true] as [boolean, boolean],
-        }
-        const revealMove = botFn(revealState, 1)
+        // 2. Human commits
+        const humanSalt = new Uint8Array(32).fill(7)
+        const room = res1.state.room || new Uint8Array(32)
+        const humanHash = computeRpsHash(room, 0, 0, humanSalt)
+        const res2 = game.engine.apply(res1.state, 0, { type: 'commit', room, hash: humanHash })
+        expect(res2.state.phase).toBe('reveal')
+        expect(res2.state.commits[0]).toBe(true)
+        expect(res2.state.commits[1]).toBe(true)
+
+        // 3. Bot reveals from the resulting state
+        const revealMove = botFn(res2.state, 1)
         expect(revealMove.type).toBe('reveal')
+        const res3 = game.engine.apply(res2.state, 1, revealMove)
+        expect(res3.state.reveals[1]).toBe(true)
+        expect(res3.outcome).toBe('continue')
+
+        // 4. Verify tampered reveal forfeits to player 0
+        const tamperedSalt = new Uint8Array(32).fill(99)
+        const tamperedReveal = {
+          type: 'reveal' as const,
+          choice: revealMove.type === 'reveal' ? revealMove.choice : 0,
+          salt: tamperedSalt,
+        }
+        const resTampered = game.engine.apply(res2.state, 1, tamperedReveal)
+        expect(resTampered.outcome).toEqual({ win: 0 })
       }
     })
   })
@@ -94,19 +114,36 @@ describe('Practice Mode Bots and Engines', () => {
         const commitMove = botFn(state, 1)
         expect(commitMove.type).toBe('commit')
 
-        const resCommit = game.engine.apply(state, 1, commitMove)
-        expect(resCommit.state.commits[1]).toBe(true)
+        // 1. Bot commits
+        const res1 = game.engine.apply(state, 1, commitMove)
+        expect(res1.state.commits[1]).toBe(true)
 
-        // Bot reveal
-        const revealState = {
-          ...resCommit.state,
-          phase: 'reveal' as const,
-          commits: [true, true] as [boolean, boolean],
-        }
-        const revealMove = botFn(revealState, 1)
+        // 2. Human commits
+        const humanSalt = new Uint8Array(32).fill(7)
+        const room = res1.state.room || new Uint8Array(32)
+        const humanHash = computeDiceHash(room, 0, 4, humanSalt)
+        const res2 = game.engine.apply(res1.state, 0, { type: 'commit', room, hash: humanHash })
+        expect(res2.state.phase).toBe('reveal')
+        expect(res2.state.commits[0]).toBe(true)
+        expect(res2.state.commits[1]).toBe(true)
+
+        // 3. Bot reveals from the resulting state
+        const revealMove = botFn(res2.state, 1)
         expect(revealMove.type).toBe('reveal')
+        const res3 = game.engine.apply(res2.state, 1, revealMove)
+        expect(res3.state.reveals[1]).toBe(true)
+        expect(res3.outcome).toBe('continue')
+
+        // 4. Verify tampered reveal forfeits to player 0
+        const tamperedSalt = new Uint8Array(32).fill(99)
+        const tamperedReveal = {
+          type: 'reveal' as const,
+          choice: revealMove.type === 'reveal' ? revealMove.choice : 1,
+          salt: tamperedSalt,
+        }
+        const resTampered = game.engine.apply(res2.state, 1, tamperedReveal)
+        expect(resTampered.outcome).toEqual({ win: 0 })
       }
     })
   })
 })
-
