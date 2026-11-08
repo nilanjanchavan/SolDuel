@@ -182,20 +182,15 @@ fn test_word_chain_strike_does_not_extend_deadline() {
     let outcome = game_apply(1, &mut state, 0, &[], strike_ts).unwrap();
     assert_eq!(outcome, Outcome::Continue);
 
-    let curr_laggard = game_laggard(1, &state).unwrap();
-    assert_eq!(curr_laggard, Some(0)); // Still player 0's turn
-
-    let is_same_laggard = match (prev_laggard, curr_laggard) {
-        (Some(p1), Some(p2)) => p1 == p2,
-        _ => false,
-    };
-    assert!(is_same_laggard);
-
-    let mut deadline_ts = original_deadline;
-    if !is_same_laggard || deadline_ts == 0 {
-        deadline_ts = strike_ts + deadline_secs;
-    }
-    assert_eq!(deadline_ts, original_deadline, "Deadline must not be extended on strike");
+    let next_deadline = compute_next_action_deadline(
+        1,
+        &state,
+        prev_laggard,
+        original_deadline,
+        strike_ts,
+    )
+    .unwrap();
+    assert_eq!(next_deadline, original_deadline, "Deadline must not be extended on strike");
 }
 
 #[test]
