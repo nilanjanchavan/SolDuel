@@ -319,21 +319,23 @@ export default function RoomPage({
       ? getGame(currentRoom.game as GameKind)
       : undefined;
 
+  const roomCode = `SD-${address.slice(0, 8).toUpperCase()}`;
+
   return (
-    <div className="max-w-3xl mx-auto space-y-6 py-4">
+    <div className="max-w-3xl mx-auto space-y-6 py-4 font-mono">
       {/* Top Bar Navigation */}
       <div className="flex justify-between items-center">
         <div className="flex items-center gap-3">
           <Link
             href="/"
-            className="text-sm flex items-center gap-1.5 text-neutral-500 hover:text-neutral-900 dark:hover:text-white transition"
+            className="text-xs font-bold flex items-center gap-1.5 text-slate-400 hover:text-emerald-400 transition"
           >
             <ArrowLeft className="h-4 w-4" />
-            Back to Lobby
+            <span>&lt; RETURN_TO_LOBBY</span>
           </Link>
           {isError && currentRoom && (
-            <span className="text-xs bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 px-2.5 py-0.5 rounded-full font-medium motion-safe:animate-pulse">
-              Reconnecting to network...
+            <span className="text-xs bg-amber-500/10 text-amber-400 border border-amber-500/30 px-2.5 py-0.5 rounded font-mono animate-pulse">
+              SIGNAL_RECONNECTING...
             </span>
           )}
         </div>
@@ -341,52 +343,54 @@ export default function RoomPage({
       </div>
 
       {/* Room Details Card */}
-      <Card className="p-6 bg-white dark:bg-neutral-900 border-neutral-200 dark:border-neutral-800 space-y-6">
+      <Card className="p-6 hacker-panel border border-emerald-500/30 space-y-6 text-slate-200">
         {/* Header */}
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 border-b border-neutral-200 dark:border-neutral-800 pb-4">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-slate-800 pb-4">
           <div>
             <div className="flex items-center gap-2">
-              <h2 className="text-2xl font-bold">{gameName} Match</h2>
+              <h2 className="text-xl font-black text-white">{gameName.toUpperCase()} MATCHROOM</h2>
               <span
-                className={`text-xs px-2.5 py-0.5 rounded-full font-mono font-semibold uppercase ${
+                className={`text-[10px] px-2 py-0.5 rounded font-mono font-bold uppercase border ${
                   statusKey === 'active'
-                    ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
+                    ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/40'
                     : statusKey === 'open'
-                    ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20'
-                    : 'bg-neutral-200 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400'
+                    ? 'bg-amber-500/15 text-amber-300 border-amber-500/40'
+                    : 'bg-slate-800 text-slate-400 border-slate-700'
                 }`}
               >
-                {statusKey}
+                STATUS::{statusKey}
               </span>
             </div>
-            <p className="text-xs text-neutral-500 dark:text-neutral-400 font-mono mt-0.5">
-              Room PDA: {address.slice(0, 8)}...{address.slice(-8)}
-            </p>
+            <div className="flex items-center gap-3 text-xs text-slate-400 mt-1 font-mono">
+              <span>ROOM_CODE: <strong className="text-amber-400 font-bold">{roomCode}</strong></span>
+              <span>•</span>
+              <span title={address}>PDA: {address.slice(0, 6)}...{address.slice(-6)}</span>
+            </div>
           </div>
 
-          <div className="text-left sm:text-right">
-            <div className="text-lg font-bold text-purple-600 dark:text-purple-400">
-              {totalPotCoins} Coins Pot
+          <div className="text-left sm:text-right bg-[#05090f] border border-slate-800 px-3.5 py-2 rounded">
+            <div className="text-base font-black text-emerald-400">
+              {totalPotCoins} COINS POT
             </div>
-            <div className="text-xs text-neutral-500">
-              Each staked: {tierCoins} Coins ({stakeSol} SOL)
+            <div className="text-[11px] text-slate-400 font-mono">
+              STAKE: {tierCoins} COINS ({stakeSol} SOL)
             </div>
           </div>
         </div>
 
         {/* Players View */}
-        <div className="grid grid-cols-2 gap-4 text-center">
-          <div className="p-3 bg-neutral-100 dark:bg-neutral-800/60 rounded-xl">
-            <span className="text-xs text-neutral-500 uppercase font-semibold">Player 1 (Creator)</span>
-            <div className="font-mono text-sm font-medium mt-1 truncate">
+        <div className="grid grid-cols-2 gap-3 text-center">
+          <div className="p-3 bg-[#05090f] border border-slate-800 rounded">
+            <span className="text-[10px] text-slate-400 uppercase font-bold block">// PLAYER_01 (HOST)</span>
+            <div className="font-mono text-xs text-emerald-400 font-bold mt-1 truncate">
               {currentRoom.players[0].toBase58()}
             </div>
           </div>
-          <div className="p-3 bg-neutral-100 dark:bg-neutral-800/60 rounded-xl">
-            <span className="text-xs text-neutral-500 uppercase font-semibold">Player 2 (Challenger)</span>
-            <div className="font-mono text-sm font-medium mt-1 truncate">
+          <div className="p-3 bg-[#05090f] border border-slate-800 rounded">
+            <span className="text-[10px] text-slate-400 uppercase font-bold block">// PLAYER_02 (CHALLENGER)</span>
+            <div className="font-mono text-xs font-bold mt-1 truncate text-slate-300">
               {currentRoom.players[1].equals(PublicKey.default)
-                ? 'Waiting for opponent...'
+                ? 'WAITING_FOR_HANDSHAKE...'
                 : currentRoom.players[1].toBase58()}
             </div>
           </div>
@@ -394,43 +398,69 @@ export default function RoomPage({
 
         {/* Status: OPEN -> Waiting for Opponent */}
         {statusKey === 'open' && (
-          <div className="space-y-4 bg-amber-500/5 border border-amber-500/20 p-5 rounded-xl">
-            <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400 font-semibold text-sm">
-              <Users className="h-4 w-4" />
-              Waiting for an opponent to join...
+          <div className="space-y-4 bg-amber-950/20 border border-amber-500/30 p-5 rounded-xl font-mono">
+            <div className="flex items-center gap-2 text-amber-400 font-bold text-xs uppercase tracking-wider">
+              <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
+              <span>AWAITING_CHALLENGER_HANDSHAKE</span>
             </div>
-            <div className="flex gap-2">
-              <Input
-                readOnly
-                value={shareUrl}
-                className="font-mono text-xs"
-              />
-              <Button onClick={handleCopyLink} variant="outline" size="sm" className="flex items-center gap-1.5 shrink-0">
-                {copied ? <Check className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5" />}
-                <span>{copied ? 'Copied' : 'Share Link'}</span>
+
+            {/* Prominent Room Access Code Display Box */}
+            <div className="p-4 rounded bg-[#05090f] border border-amber-500/40 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+              <div>
+                <span className="text-[10px] text-slate-400 block font-bold">// ROOM ACCESS CODE</span>
+                <span className="text-xl font-black text-amber-300 tracking-widest">{roomCode}</span>
+                <span className="text-[10px] text-slate-400 block mt-0.5">Share this code with your challenger to join</span>
+              </div>
+              <Button
+                onClick={() => {
+                  navigator.clipboard.writeText(roomCode);
+                  toast.success(`Copied room code: ${roomCode}`);
+                }}
+                variant="outline"
+                size="sm"
+                className="bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border-amber-500/40 text-xs font-bold cursor-pointer"
+              >
+                <Copy className="h-3.5 w-3.5 mr-1" />
+                <span>COPY CODE</span>
               </Button>
+            </div>
+
+            {/* Direct Share Link */}
+            <div className="space-y-1">
+              <span className="text-[10px] text-slate-400 font-bold">// OR SHARE INVITE LINK</span>
+              <div className="flex gap-2">
+                <Input
+                  readOnly
+                  value={shareUrl}
+                  className="font-mono text-xs bg-[#05090f] border-slate-800 text-slate-300"
+                />
+                <Button onClick={handleCopyLink} variant="outline" size="sm" className="flex items-center gap-1.5 shrink-0 bg-slate-900 border-slate-700 text-xs font-bold cursor-pointer">
+                  {copied ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}
+                  <span>{copied ? 'COPIED' : 'COPY LINK'}</span>
+                </Button>
+              </div>
             </div>
 
             {/* If spectator / challenger: Join button for custom rooms, Quick Play guidance for quick play */}
             {!isCreator && currentRoom.isQuickPlay && (
               <div className="space-y-2 text-center py-2">
-                <p className="text-xs text-neutral-500">
-                  This room was created through Quick Play. Use Quick Play in the lobby with this game and tier to match with an available player.
+                <p className="text-xs text-slate-400">
+                  // This room is queued in Quick Play. Match using the lobby Quick Match queue.
                 </p>
-                <Button asChild className="w-full bg-purple-600 hover:bg-purple-700 text-white font-semibold py-5">
+                <Button asChild className="w-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black py-5">
                   <Link href={`/?tab=quick&game=${currentRoom.game}&tier=${currentRoom.tier}`}>
-                    Find Match via Quick Play
+                    [ FIND MATCH VIA QUICK PLAY ]
                   </Link>
                 </Button>
               </div>
             )}
             {!isCreator && !currentRoom.isQuickPlay && (
               <Button
-                className="w-full bg-purple-600 hover:bg-purple-700 text-white font-semibold py-5"
+                className="w-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black py-5 text-sm shadow-[0_0_15px_rgba(16,185,129,0.35)] cursor-pointer"
                 disabled={isJoining}
                 onClick={handleJoin}
               >
-                {isJoining ? 'Joining Match...' : `Join Match & Stake ${tierCoins} Coins (${stakeSol} SOL)`}
+                {isJoining ? '[ JOINING_MATCH... ]' : `[ ACCEPT CHALLENGE & STAKE ${tierCoins} COINS (${stakeSol} SOL) ]`}
               </Button>
             )}
 
@@ -439,11 +469,11 @@ export default function RoomPage({
               <Button
                 variant="destructive"
                 size="sm"
-                className="w-full"
+                className="w-full text-xs font-bold"
                 disabled={isCancelling}
                 onClick={handleCancel}
               >
-                {isCancelling ? 'Cancelling...' : 'Cancel Room & Refund Stake'}
+                {isCancelling ? 'CANCELLING_ROOM...' : '[ CANCEL ROOM & REFUND ESCROW ]'}
               </Button>
             )}
           </div>
@@ -453,40 +483,40 @@ export default function RoomPage({
         {statusKey === 'active' && (
           <div className="space-y-6">
             {/* Timer bar */}
-            <div className="flex justify-between items-center bg-neutral-100 dark:bg-neutral-800 p-3 rounded-lg text-sm">
+            <div className="flex justify-between items-center bg-[#05090f] border border-slate-800 p-3 rounded font-mono text-xs">
               <div className="flex items-center gap-2">
-                <Clock className="h-4 w-4 text-purple-500" />
-                <span>Move Deadline:</span>
+                <Clock className="h-4 w-4 text-cyan-400" />
+                <span className="text-slate-400">// ACTION_DEADLINE:</span>
               </div>
               <div className="font-mono font-bold">
                 {deadlineSecondsRemaining > 0 ? (
-                  <span>{deadlineSecondsRemaining}s</span>
+                  <span className="text-emerald-400">{deadlineSecondsRemaining}s REMAINING</span>
                 ) : (
-                  <span className="text-red-500">EXPIRED</span>
+                  <span className="text-red-400 font-black animate-pulse">! CLOCK_EXPIRED !</span>
                 )}
               </div>
             </div>
 
             {/* Timeout Claim Button */}
             {timeoutClaimable && isPlayer && (
-              <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl space-y-2">
-                <div className="text-sm font-semibold text-red-600 dark:text-red-400 flex items-center gap-2">
+              <div className="p-4 bg-red-950/30 border border-red-500/40 rounded space-y-2 font-mono">
+                <div className="text-xs font-bold text-red-400 flex items-center gap-2">
                   <ShieldAlert className="h-4 w-4" />
-                  Opponent timed out! Grace period has passed.
+                  <span>OPPONENT_TIMEOUT_DETECTED // GRACE_PERIOD_ELAPSED</span>
                 </div>
                 <Button
-                  className="w-full bg-red-600 hover:bg-red-700 text-white font-semibold"
+                  className="w-full bg-red-600 hover:bg-red-500 text-white font-black py-5 text-xs tracking-wider"
                   disabled={isClaimingTimeout}
                   onClick={handleClaimTimeout}
                 >
-                  {isClaimingTimeout ? 'Claiming Victory...' : `Claim Timeout Win & Collect ${totalPotCoins} Coins`}
+                  {isClaimingTimeout ? 'CLAIMING_SETTLEMENT...' : `[ CLAIM TIMEOUT VICTORY // COLLECT ${totalPotCoins} COINS ]`}
                 </Button>
               </div>
             )}
 
             {/* Game Board Display */}
             {registered && registered.ui ? (
-              <div className="p-4 bg-neutral-50 dark:bg-neutral-950 rounded-xl border border-neutral-200 dark:border-neutral-800">
+              <div className="p-4 bg-[#05090f]/90 rounded-xl border border-emerald-500/30 shadow-[0_0_20px_rgba(0,0,0,0.5)]">
                 <registered.ui.Board
                   state={registered.engine.decodeState(new Uint8Array(currentRoom.state))}
                   me={myPlayerIdx >= 0 ? (myPlayerIdx as 0 | 1) : 0}
@@ -499,8 +529,8 @@ export default function RoomPage({
                 />
               </div>
             ) : (
-              <div className="py-8 text-center text-sm text-neutral-500">
-                Live board is active. Waiting for player actions...
+              <div className="py-8 text-center text-xs text-slate-500 font-mono">
+                &gt; LIVE_BOARD_ACTIVE // AWAITING_ACTIONS...
               </div>
             )}
           </div>
@@ -508,15 +538,15 @@ export default function RoomPage({
 
         {/* Status: FINISHED */}
         {statusKey === 'finished' && (
-          <div className="py-8 text-center space-y-4 bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-6">
-            <Trophy className="h-12 w-12 text-emerald-500 mx-auto" />
-            <h3 className="text-xl font-bold text-emerald-600 dark:text-emerald-400">Match Finished!</h3>
-            <p className="text-sm text-neutral-500">
-              The match has concluded and funds ({totalPotCoins} coins) have been distributed on-chain according to the match outcome.
+          <div className="py-8 text-center space-y-4 bg-emerald-950/20 border border-emerald-500/40 rounded-xl p-6 font-mono">
+            <Trophy className="h-10 w-10 text-emerald-400 mx-auto" />
+            <h3 className="text-lg font-black text-emerald-400 tracking-wider">DUEL_CONCLUDED // MATCH_FINISHED</h3>
+            <p className="text-xs text-slate-400 max-w-md mx-auto">
+              Match arbitrated on Solana. Escrow funds ({totalPotCoins} Coins) distributed to winner.
             </p>
-            <Link href="/">
-              <Button className="mt-2 bg-purple-600 hover:bg-purple-700 text-white">
-                Back to SolDuel Lobby
+            <Link href="/" className="inline-block mt-2">
+              <Button className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs px-6 py-4 rounded">
+                [ RETURN_TO_LOBBY ]
               </Button>
             </Link>
           </div>
@@ -524,12 +554,12 @@ export default function RoomPage({
 
         {/* Status: CANCELLED */}
         {statusKey === 'cancelled' && (
-          <div className="py-8 text-center space-y-4 bg-neutral-100 dark:bg-neutral-800/60 rounded-xl p-6">
-            <h3 className="text-lg font-bold">Room Cancelled</h3>
-            <p className="text-sm text-neutral-500">Stakes have been refunded to the creator.</p>
-            <Link href="/">
-              <Button variant="outline" className="mt-2">
-                Back to SolDuel Lobby
+          <div className="py-8 text-center space-y-4 bg-slate-900 border border-slate-800 rounded-xl p-6 font-mono">
+            <h3 className="text-base font-bold text-slate-300">ROOM_CANCELLED // ESCROW_REFUNDED</h3>
+            <p className="text-xs text-slate-500">Stakes have been refunded to the room creator.</p>
+            <Link href="/" className="inline-block mt-2">
+              <Button variant="outline" className="text-xs font-bold">
+                [ RETURN_TO_LOBBY ]
               </Button>
             </Link>
           </div>

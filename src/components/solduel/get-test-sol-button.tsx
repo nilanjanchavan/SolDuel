@@ -3,11 +3,11 @@
 import { useConnection, useWallet } from '@solana/wallet-adapter-react'
 import { LAMPORTS_PER_SOL } from '@solana/web3.js'
 import { Button } from '@/components/ui/button'
-import { ExternalLink, Droplet } from 'lucide-react'
+import { ExternalLink, Terminal } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 
 /**
- * Component displaying real-time devnet SOL balance and a direct link to the official Solana faucet.
+ * High-tech terminal balance display and direct external link to the Solana devnet faucet.
  */
 export function GetTestSolButton() {
   const { connection } = useConnection()
@@ -29,13 +29,13 @@ export function GetTestSolButton() {
     : 'https://faucet.solana.com'
 
   return (
-    <div className="flex flex-wrap items-center gap-2.5">
+    <div className="flex flex-wrap items-center gap-2.5 font-mono">
       {publicKey && balance !== undefined && (
-        <div className="flex items-center gap-2 bg-slate-900/90 border border-slate-700/60 px-3.5 py-1.5 rounded-xl shadow-inner text-xs font-mono">
-          <span className="w-2 h-2 rounded-full bg-emerald-400 motion-safe:animate-pulse" />
-          <span className="text-slate-400">Balance:</span>
-          <span className="font-bold text-amber-300">{balance.toFixed(2)} SOL</span>
-          <span className="text-[10px] text-slate-500">({(balance * 10_000).toLocaleString()} coins)</span>
+        <div className="flex items-center gap-2 bg-[#05090f] border border-emerald-500/30 px-3 py-1.5 rounded text-xs">
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+          <span className="text-slate-400 font-bold">BAL:</span>
+          <span className="font-bold text-emerald-300">{balance.toFixed(2)} SOL</span>
+          <span className="text-[10px] text-slate-400">({(balance * 10_000).toLocaleString()} coins)</span>
         </div>
       )}
 
@@ -44,11 +44,11 @@ export function GetTestSolButton() {
         variant="outline"
         size="sm"
         onClick={() => window.open(faucetUrl, '_blank', 'noopener,noreferrer')}
-        className="flex items-center gap-1.5 bg-gradient-to-r from-amber-500/10 via-amber-500/15 to-amber-600/10 hover:from-amber-500/20 hover:to-amber-500/25 text-amber-300 border-amber-500/40 hover:border-amber-400 font-semibold cursor-pointer rounded-xl transition-all shadow-sm shadow-amber-500/10"
+        className="flex items-center gap-1.5 bg-cyan-950/40 hover:bg-cyan-950/70 text-cyan-300 border-cyan-500/40 hover:border-cyan-400 font-mono text-xs font-bold cursor-pointer rounded transition-all shadow-[0_0_8px_rgba(6,182,212,0.2)]"
       >
-        <Droplet className="h-3.5 w-3.5 text-amber-400 fill-amber-400/30" />
-        <span>Solana Faucet</span>
-        <ExternalLink className="h-3 w-3 opacity-70 ml-0.5" />
+        <Terminal className="h-3.5 w-3.5 text-cyan-400" />
+        <span>+ REFUEL_FAUCET</span>
+        <ExternalLink className="h-3 w-3 opacity-80" />
       </Button>
     </div>
   )
