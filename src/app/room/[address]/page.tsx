@@ -538,17 +538,34 @@ export default function RoomPage({
 
         {/* Status: FINISHED */}
         {statusKey === 'finished' && (
-          <div className="py-8 text-center space-y-4 bg-emerald-950/20 border border-emerald-500/40 rounded-xl p-6 font-mono">
-            <Trophy className="h-10 w-10 text-emerald-400 mx-auto" />
-            <h3 className="text-lg font-black text-emerald-400 tracking-wider">DUEL_CONCLUDED // MATCH_FINISHED</h3>
-            <p className="text-xs text-slate-400 max-w-md mx-auto">
-              Match arbitrated on Solana. Escrow funds ({totalPotCoins} Coins) distributed to winner.
-            </p>
-            <Link href="/" className="inline-block mt-2">
-              <Button className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs px-6 py-4 rounded">
-                [ RETURN_TO_LOBBY ]
-              </Button>
-            </Link>
+          <div className="space-y-6">
+            <div className="py-8 text-center space-y-4 bg-emerald-950/20 border border-emerald-500/40 rounded-xl p-6 font-mono">
+              <Trophy className="h-10 w-10 text-emerald-400 mx-auto" />
+              <h3 className="text-lg font-black text-emerald-400 tracking-wider">DUEL_CONCLUDED // MATCH_FINISHED</h3>
+              <p className="text-xs text-slate-400 max-w-md mx-auto">
+                Match arbitrated on Solana. Escrow funds ({totalPotCoins} Coins) distributed to winner.
+              </p>
+              <Link href="/" className="inline-block mt-2">
+                <Button className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs px-6 py-4 rounded">
+                  [ RETURN_TO_LOBBY ]
+                </Button>
+              </Link>
+            </div>
+
+            {/* Final Duel Showdown & Board Snapshot */}
+            {registered && registered.ui && currentRoom && (
+              <div className="p-4 bg-[#05090f]/90 rounded-xl border border-emerald-500/30 shadow-[0_0_20px_rgba(0,0,0,0.5)]">
+                <div className="text-[10px] font-mono uppercase tracking-widest text-emerald-400/80 mb-3 text-center">
+                  FINAL_DUEL_SHOWDOWN // RESOLVED_ON_CHAIN
+                </div>
+                <registered.ui.Board
+                  state={registered.engine.decodeState(new Uint8Array(currentRoom.state))}
+                  me={myPlayerIdx >= 0 ? (myPlayerIdx as 0 | 1) : 0}
+                  onMove={() => {}}
+                  disabled={true}
+                />
+              </div>
+            )}
           </div>
         )}
 

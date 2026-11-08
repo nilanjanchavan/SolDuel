@@ -3,6 +3,7 @@
 import React, { useState } from 'react'
 import { RpsChoice, RpsMove, RpsState } from './types'
 import { computeRpsHash, recordHumanMove } from './bot'
+import { rpsBeats } from './index'
 
 export interface RpsBoardProps {
   state: RpsState
@@ -88,8 +89,16 @@ function clearSecret(room: Uint8Array | null, round: number, me: number) {
   } catch {}
 }
 
+interface RoundShowdown {
+  round: number
+  myChoice: RpsChoice
+  oppChoice: RpsChoice
+  winner: 'me' | 'opp' | 'tie'
+}
+
 /**
  * Rock Paper Scissors interactive board component for commit-reveal gameplay.
+ * Accurately tracks and displays choices from both players after reveal.
  */
 export function RpsBoard({ state, me, onMove, disabled }: RpsBoardProps) {
   const [committing, setCommitting] = useState(false)
@@ -103,7 +112,36 @@ export function RpsBoard({ state, me, onMove, disabled }: RpsBoardProps) {
   })
   const [prevRound, setPrevRound] = useState(state.round)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const [lastShowdown, setLastShowdown] = useState<RoundShowdown | null>(null)
 
+  const opponent = (1 - me) as 0 | 1
+  const myCommitDone = state.commits[me]
+  const oppCommitDone = state.commits[opponent]
+  const myRevealDone = state.reveals[me]
+  const oppRevealDone = state.reveals[opponent]
+
+  // Track showdown whenever both choices are revealed
+  if (state.lastChoices[0] !== null && state.lastChoices[1] !== null) {
+    const cMe = state.lastChoices[me]!
+    const cOpp = state.lastChoices[opponent]!
+    const winner = cMe === cOpp ? 'tie' : rpsBeats(cMe, cOpp) ? 'me' : 'opp'
+    const showdownRound = state.phase === 'commit' && state.round > 0 ? state.round - 1 : state.round
+    if (
+      !lastShowdown ||
+      lastShowdown.round !== showdownRound ||
+      lastShowdown.myChoice !== cMe ||
+      lastShowdown.oppChoice !== cOpp
+    ) {
+      setLastShowdown({
+        round: showdownRound,
+        myChoice: cMe,
+        oppChoice: cOpp,
+        winner,
+      })
+    }
+  }
+
+  // Handle round transitions while preserving secret and showdown history
   if (state.round !== prevRound) {
     clearSecret(state.room, prevRound, me)
     setPrevRound(state.round)
@@ -112,12 +150,6 @@ export function RpsBoard({ state, me, onMove, disabled }: RpsBoardProps) {
     setMySalt(restored ? restored.salt : null)
     setErrorMessage(null)
   }
-
-  const opponent = (1 - me) as 0 | 1
-  const myCommitDone = state.commits[me]
-  const oppCommitDone = state.commits[opponent]
-  const myRevealDone = state.reveals[me]
-  const oppRevealDone = state.reveals[opponent]
 
   const handleSelectChoice = (c: RpsChoice) => {
     if (disabled || myCommitDone || committing || state.phase !== 'commit') return
@@ -165,17 +197,17 @@ export function RpsBoard({ state, me, onMove, disabled }: RpsBoardProps) {
   }
 
   return (
-    <div className="flex flex-col items-center justify-center p-6 bg-slate-900 border border-slate-800 rounded-2xl max-w-xl mx-auto shadow-2xl text-slate-100">
+    <div className="flex flex-col items-center justify-center p-6 bg-slate-900 border border-slate-800 rounded-2xl max-w-xl mx-auto shadow-2xl text-slate-100 font-mono">
       {/* Header & Scoreboard */}
       <div className="w-full flex justify-between items-center mb-6 border-b border-slate-800 pb-4">
         <div className="text-left">
           <span className="text-xs uppercase tracking-wider text-slate-400 font-semibold">Match Score</span>
           <div className="flex items-center space-x-3 mt-1">
-            <span className={`text-xl font-bold ${me === 0 ? 'text-amber-400' : 'text-slate-300'}`}>
+            <span className={`text-xl font-bold ${state.scores[me] > state.scores[opponent] ? 'text-emerald-400' : 'text-slate-200'}`}>
               You: {state.scores[me]}
             </span>
             <span className="text-slate-600 font-bold">vs</span>
-            <span className={`text-xl font-bold ${opponent === 0 ? 'text-amber-400' : 'text-slate-300'}`}>
+            <span className={`text-xl font-bold ${state.scores[opponent] > state.scores[me] ? 'text-rose-400' : 'text-slate-200'}`}>
               Opponent: {state.scores[opponent]}
             </span>
           </div>
@@ -188,26 +220,60 @@ export function RpsBoard({ state, me, onMove, disabled }: RpsBoardProps) {
         </div>
       </div>
 
+      {/* Prominent Round Showdown Banner (Visible as soon as both reveal & persists into next round) */}
+      {lastShowdown && (
+        <div className="w-full mb-6 p-4 rounded-xl bg-slate-950/80 border border-slate-700/80 text-center shadow-lg">
+          <div className="text-[11px] font-mono text-slate-400 mb-2 uppercase tracking-wider">
+            Round {lastShowdown.round + 1} Result
+          </div>
+          <div className="flex items-center justify-around py-3 px-4 bg-slate-900/90 rounded-lg border border-slate-800">
+            <div className="flex flex-col items-center">
+              <span className="text-[10px] text-slate-400 font-bold mb-1">YOU CHOSE</span>
+              <span className="text-4xl mb-1">{CHOICES[lastShowdown.myChoice].icon}</span>
+              <span className="text-xs font-bold text-slate-200">{CHOICES[lastShowdown.myChoice].label}</span>
+            </div>
+
+            <div className="text-xl font-black text-slate-600 font-mono">VS</div>
+
+            <div className="flex flex-col items-center">
+              <span className="text-[10px] text-slate-400 font-bold mb-1">OPPONENT CHOSE</span>
+              <span className="text-4xl mb-1">{CHOICES[lastShowdown.oppChoice].icon}</span>
+              <span className="text-xs font-bold text-slate-200">{CHOICES[lastShowdown.oppChoice].label}</span>
+            </div>
+          </div>
+
+          <div className="mt-3 font-bold text-xs tracking-wider">
+            {lastShowdown.winner === 'me' ? (
+              <span className="text-emerald-400">🎉 YOU WON ROUND {lastShowdown.round + 1}!</span>
+            ) : lastShowdown.winner === 'opp' ? (
+              <span className="text-rose-400">💀 OPPONENT WON ROUND {lastShowdown.round + 1}</span>
+            ) : (
+              <span className="text-amber-400">🤝 ROUND {lastShowdown.round + 1} TIED (REPLAYING)</span>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Phase Status Banner */}
       <div className="w-full mb-6 py-2 px-4 rounded-lg bg-slate-800/60 border border-slate-700/60 text-center">
         {state.phase === 'commit' ? (
           <div>
-            <div className="text-sm font-semibold text-amber-400">Step 1: Commit Phase</div>
+            <div className="text-sm font-semibold text-amber-400">Step 1: Commit Move</div>
             <div className="text-xs text-slate-400 mt-0.5">
-              Choose your move secretly. Moves are cryptographically committed to the room.
+              Choose your move secretly. Both players commit their hash before either reveals.
             </div>
           </div>
         ) : (
           <div>
             <div className="text-sm font-semibold text-emerald-400">Step 2: Reveal Phase</div>
             <div className="text-xs text-slate-400 mt-0.5">
-              Both players committed! Reveal your choice to resolve the round.
+              Both moves sealed! Click Reveal to unlock the choices and resolve the round.
             </div>
           </div>
         )}
       </div>
 
-      {/* Commit status trackers */}
+      {/* Player Status Trackers */}
       <div className="grid grid-cols-2 gap-4 w-full mb-6">
         <div
           className={`p-3 rounded-xl border text-center ${myCommitDone ? 'border-emerald-500/50 bg-emerald-950/20 text-emerald-300' : 'border-slate-800 bg-slate-800/40 text-slate-400'}`}
@@ -227,7 +293,7 @@ export function RpsBoard({ state, me, onMove, disabled }: RpsBoardProps) {
         </div>
       </div>
 
-      {/* Move Choice Buttons */}
+      {/* Move Choice Buttons (Commit Phase) */}
       {state.phase === 'commit' && (
         <div className="w-full">
           <div className="text-center text-xs text-slate-400 mb-3 font-medium">Pick Rock, Paper, or Scissors</div>
@@ -252,14 +318,33 @@ export function RpsBoard({ state, me, onMove, disabled }: RpsBoardProps) {
         </div>
       )}
 
-      {/* Reveal Action Button */}
+      {/* Reveal Action Button & Pending Status (Reveal Phase) */}
       {state.phase === 'reveal' && (
         <div className="w-full text-center">
-          {myRevealDone ? (
-            <div className="py-4 text-emerald-400 font-medium text-sm motion-safe:animate-pulse">
-              You revealed {selectedChoice !== null ? CHOICES[selectedChoice].label : 'choice'}! Awaiting opponent...
+          {myRevealDone && !oppRevealDone ? (
+            <div className="py-4 text-center bg-slate-950/50 rounded-xl border border-slate-800">
+              <div className="text-sm font-semibold text-cyan-400">
+                You revealed {selectedChoice !== null ? `${CHOICES[selectedChoice].icon} ${CHOICES[selectedChoice].label}` : 'your move'}!
+              </div>
+              <p className="text-xs text-slate-400 mt-1 animate-pulse">
+                Awaiting opponent reveal... The showdown will appear as soon as both reveal!
+              </p>
             </div>
-          ) : (
+          ) : !myRevealDone && oppRevealDone ? (
+            <div className="space-y-3">
+              <div className="text-xs text-emerald-400 font-semibold animate-pulse">
+                Opponent has confirmed their choice! Click Reveal to see the winner:
+              </div>
+              <button
+                type="button"
+                disabled={disabled}
+                onClick={handleReveal}
+                className="w-full py-4 px-6 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white font-bold text-lg shadow-lg shadow-emerald-900/30 transition-all cursor-pointer active:scale-98"
+              >
+                Reveal {selectedChoice !== null ? `${CHOICES[selectedChoice].icon} ${CHOICES[selectedChoice].label}` : 'Your Move'}
+              </button>
+            </div>
+          ) : !myRevealDone ? (
             <div>
               <button
                 type="button"
@@ -267,11 +352,12 @@ export function RpsBoard({ state, me, onMove, disabled }: RpsBoardProps) {
                 onClick={handleReveal}
                 className="w-full py-4 px-6 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white font-bold text-lg shadow-lg shadow-emerald-900/30 transition-all cursor-pointer active:scale-98"
               >
-                Reveal{' '}
-                {selectedChoice !== null
-                  ? `${CHOICES[selectedChoice].icon} ${CHOICES[selectedChoice].label}`
-                  : 'Your Move'}
+                Reveal {selectedChoice !== null ? `${CHOICES[selectedChoice].icon} ${CHOICES[selectedChoice].label}` : 'Your Move'}
               </button>
+            </div>
+          ) : (
+            <div className="py-2 text-emerald-400 font-bold text-xs">
+              ✓ Round resolved!
             </div>
           )}
         </div>
@@ -281,14 +367,6 @@ export function RpsBoard({ state, me, onMove, disabled }: RpsBoardProps) {
       {errorMessage && (
         <div className="w-full mt-4 p-2.5 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs text-center">
           {errorMessage}
-        </div>
-      )}
-
-      {/* Last revealed round display */}
-      {state.lastChoices[0] !== null && state.lastChoices[1] !== null && (
-        <div className="mt-6 pt-4 border-t border-slate-800 w-full text-center text-xs text-slate-400">
-          Last round: Player 0 chose {CHOICES[state.lastChoices[0]].label} ({CHOICES[state.lastChoices[0]].icon}) vs
-          Player 1 chose {CHOICES[state.lastChoices[1]].label} ({CHOICES[state.lastChoices[1]].icon})
         </div>
       )}
     </div>

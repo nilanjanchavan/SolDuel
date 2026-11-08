@@ -41,8 +41,8 @@ function saveSecret(room: Uint8Array | null, round: number, me: number, choice: 
   if (typeof window === 'undefined') return
   try {
     const saltHex = Array.from(salt)
-        .map((b) => b.toString(16).padStart(2, '0'))
-        .join('')
+      .map((b) => b.toString(16).padStart(2, '0'))
+      .join('')
     const val = JSON.stringify({ choice, saltHex })
     window.sessionStorage.setItem(getStorageKey(room, round, me), val)
     if (room) {
@@ -84,8 +84,16 @@ function clearSecret(room: Uint8Array | null, round: number, me: number) {
   } catch {}
 }
 
+interface DiceShowdown {
+  round: number
+  myRoll: number
+  oppRoll: number
+  winner: 'me' | 'opp' | 'tie'
+}
+
 /**
  * Dice Duel interactive board component for commit-reveal gameplay.
+ * Displays prominent dice showdowns between players upon reveal.
  */
 export function DiceBoard({ state, me, onMove, disabled }: DiceBoardProps) {
   const [committing, setCommitting] = useState(false)
@@ -99,7 +107,36 @@ export function DiceBoard({ state, me, onMove, disabled }: DiceBoardProps) {
   })
   const [prevRound, setPrevRound] = useState(state.round)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const [lastShowdown, setLastShowdown] = useState<DiceShowdown | null>(null)
 
+  const opponent = (1 - me) as 0 | 1
+  const myCommitDone = state.commits[me]
+  const oppCommitDone = state.commits[opponent]
+  const myRevealDone = state.reveals[me]
+  const oppRevealDone = state.reveals[opponent]
+
+  // Track showdown whenever both rolls are revealed
+  if (state.rolls[0] > 0 && state.rolls[1] > 0) {
+    const rMe = state.rolls[me]
+    const rOpp = state.rolls[opponent]
+    const winner = rMe > rOpp ? 'me' : rOpp > rMe ? 'opp' : 'tie'
+    const showdownRound = state.phase === 'commit' && state.round > 0 ? state.round - 1 : state.round
+    if (
+      !lastShowdown ||
+      lastShowdown.round !== showdownRound ||
+      lastShowdown.myRoll !== rMe ||
+      lastShowdown.oppRoll !== rOpp
+    ) {
+      setLastShowdown({
+        round: showdownRound,
+        myRoll: rMe,
+        oppRoll: rOpp,
+        winner,
+      })
+    }
+  }
+
+  // Handle round transitions
   if (state.round !== prevRound) {
     clearSecret(state.room, prevRound, me)
     setPrevRound(state.round)
@@ -108,12 +145,6 @@ export function DiceBoard({ state, me, onMove, disabled }: DiceBoardProps) {
     setMySalt(restored ? restored.salt : null)
     setErrorMessage(null)
   }
-
-  const opponent = (1 - me) as 0 | 1
-  const myCommitDone = state.commits[me]
-  const oppCommitDone = state.commits[opponent]
-  const myRevealDone = state.reveals[me]
-  const oppRevealDone = state.reveals[opponent]
 
   const handleRollDice = (choice?: number) => {
     if (disabled || myCommitDone || committing || state.phase !== 'commit') return
@@ -152,7 +183,7 @@ export function DiceBoard({ state, me, onMove, disabled }: DiceBoardProps) {
     }
 
     if (choice === null || !salt) {
-      setErrorMessage('Secret die roll and salt missing for reveal. Cannot reveal without matching secret.')
+      setErrorMessage('Secret roll and salt missing for reveal. Cannot reveal without matching secret.')
       return
     }
 
@@ -161,7 +192,7 @@ export function DiceBoard({ state, me, onMove, disabled }: DiceBoardProps) {
   }
 
   return (
-    <div className="flex flex-col items-center justify-center p-6 bg-slate-900 border border-slate-800 rounded-2xl max-w-xl mx-auto shadow-2xl text-slate-100">
+    <div className="flex flex-col items-center justify-center p-6 bg-slate-900 border border-slate-800 rounded-2xl max-w-xl mx-auto shadow-2xl text-slate-100 font-mono">
       {/* Header */}
       <div className="w-full flex justify-between items-center mb-6 border-b border-slate-800 pb-4">
         <div>
@@ -176,19 +207,53 @@ export function DiceBoard({ state, me, onMove, disabled }: DiceBoardProps) {
         </div>
       </div>
 
+      {/* Prominent Dice Roll Showdown (Visible once both reveal & persists) */}
+      {lastShowdown && (
+        <div className="w-full mb-6 p-4 rounded-xl bg-slate-950/80 border border-slate-700/80 text-center shadow-lg">
+          <div className="text-[11px] font-mono text-slate-400 mb-2 uppercase tracking-wider">
+            Round {lastShowdown.round + 1} Dice Roll Results
+          </div>
+          <div className="flex items-center justify-around py-4 px-4 bg-slate-900/90 rounded-lg border border-slate-800">
+            <div className="flex flex-col items-center">
+              <span className="text-[10px] text-slate-400 font-bold mb-1">YOUR ROLL</span>
+              <span className="text-5xl mb-1">{DIE_FACES[lastShowdown.myRoll]}</span>
+              <span className="text-sm font-black text-amber-400 font-mono">Score: {lastShowdown.myRoll}</span>
+            </div>
+
+            <div className="text-xl font-black text-slate-600 font-mono">VS</div>
+
+            <div className="flex flex-col items-center">
+              <span className="text-[10px] text-slate-400 font-bold mb-1">OPPONENT ROLL</span>
+              <span className="text-5xl mb-1">{DIE_FACES[lastShowdown.oppRoll]}</span>
+              <span className="text-sm font-black text-amber-400 font-mono">Score: {lastShowdown.oppRoll}</span>
+            </div>
+          </div>
+
+          <div className="mt-3 font-bold text-xs tracking-wider">
+            {lastShowdown.winner === 'me' ? (
+              <span className="text-emerald-400">🎉 YOU ROLLED HIGHER ({lastShowdown.myRoll} vs {lastShowdown.oppRoll}) — YOU WIN!</span>
+            ) : lastShowdown.winner === 'opp' ? (
+              <span className="text-rose-400">💀 OPPONENT ROLLED HIGHER ({lastShowdown.oppRoll} vs {lastShowdown.myRoll}) — OPPONENT WINS</span>
+            ) : (
+              <span className="text-amber-400">🤝 TIED ROLL ({lastShowdown.myRoll} vs {lastShowdown.oppRoll}) — REPLAYING ROUND</span>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Phase status */}
       <div className="w-full mb-6 py-2 px-4 rounded-lg bg-slate-800/60 border border-slate-700/60 text-center">
         {state.phase === 'commit' ? (
           <div>
             <div className="text-sm font-semibold text-amber-400">Step 1: Roll & Commit</div>
             <div className="text-xs text-slate-400 mt-0.5">
-              Roll your die secretly. Your roll is hashed and committed on-chain.
+              Roll your die. Your secret roll is cryptographically committed on-chain.
             </div>
           </div>
         ) : (
           <div>
             <div className="text-sm font-semibold text-emerald-400">Step 2: Reveal Phase</div>
-            <div className="text-xs text-slate-400 mt-0.5">Both players rolled! Reveal to see who scored higher.</div>
+            <div className="text-xs text-slate-400 mt-0.5">Both players sealed! Click Reveal to derive the rolls and score.</div>
           </div>
         )}
       </div>
@@ -196,7 +261,7 @@ export function DiceBoard({ state, me, onMove, disabled }: DiceBoardProps) {
       {/* Player Statuses */}
       <div className="grid grid-cols-2 gap-4 w-full mb-6">
         <div
-          className={`p-4 rounded-xl border text-center ${myCommitDone ? 'border-emerald-500/50 bg-emerald-950/20 text-emerald-300' : 'border-slate-800 bg-slate-800/40 text-slate-400'}`}
+          className={`p-3 rounded-xl border text-center ${myCommitDone ? 'border-emerald-500/50 bg-emerald-950/20 text-emerald-300' : 'border-slate-800 bg-slate-800/40 text-slate-400'}`}
         >
           <div className="text-xs">Your Status</div>
           <div className="font-semibold text-sm mt-1">
@@ -204,16 +269,16 @@ export function DiceBoard({ state, me, onMove, disabled }: DiceBoardProps) {
           </div>
         </div>
         <div
-          className={`p-4 rounded-xl border text-center ${oppCommitDone ? 'border-emerald-500/50 bg-emerald-950/20 text-emerald-300' : 'border-slate-800 bg-slate-800/40 text-slate-400'}`}
+          className={`p-3 rounded-xl border text-center ${oppCommitDone ? 'border-emerald-500/50 bg-emerald-950/20 text-emerald-300' : 'border-slate-800 bg-slate-800/40 text-slate-400'}`}
         >
           <div className="text-xs">Opponent Status</div>
           <div className="font-semibold text-sm mt-1">
-            {oppRevealDone ? '✓ Revealed' : oppCommitDone ? '✓ Committed' : 'Rolling...'}
+            {oppRevealDone ? '✓ Revealed' : oppCommitDone ? '✓ Committed' : 'Thinking...'}
           </div>
         </div>
       </div>
 
-      {/* Action Area */}
+      {/* Action Area (Commit Phase) */}
       {state.phase === 'commit' && (
         <div className="w-full text-center">
           <button
@@ -233,11 +298,30 @@ export function DiceBoard({ state, me, onMove, disabled }: DiceBoardProps) {
       {/* Reveal Action Area */}
       {state.phase === 'reveal' && (
         <div className="w-full text-center">
-          {myRevealDone ? (
-            <div className="py-4 text-emerald-400 font-medium text-sm motion-safe:animate-pulse">
-              You revealed your roll! Awaiting opponent...
+          {myRevealDone && !oppRevealDone ? (
+            <div className="py-4 text-center bg-slate-950/50 rounded-xl border border-slate-800">
+              <div className="text-sm font-semibold text-cyan-400">
+                You submitted your reveal on-chain!
+              </div>
+              <p className="text-xs text-slate-400 mt-1 animate-pulse">
+                Awaiting opponent reveal... The rolls will display as soon as both reveal!
+              </p>
             </div>
-          ) : (
+          ) : !myRevealDone && oppRevealDone ? (
+            <div className="space-y-3">
+              <div className="text-xs text-emerald-400 font-semibold animate-pulse">
+                Opponent has confirmed their secret! Click Reveal to see both rolls:
+              </div>
+              <button
+                type="button"
+                disabled={disabled}
+                onClick={handleReveal}
+                className="w-full py-4 px-6 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white font-bold text-lg shadow-lg shadow-emerald-900/30 transition-all cursor-pointer active:scale-98"
+              >
+                🎲 Reveal Roll
+              </button>
+            </div>
+          ) : !myRevealDone ? (
             <div>
               <button
                 type="button"
@@ -248,6 +332,10 @@ export function DiceBoard({ state, me, onMove, disabled }: DiceBoardProps) {
                 🎲 Reveal Roll
               </button>
             </div>
+          ) : (
+            <div className="py-2 text-emerald-400 font-bold text-xs">
+              ✓ Round resolved!
+            </div>
           )}
         </div>
       )}
@@ -256,23 +344,6 @@ export function DiceBoard({ state, me, onMove, disabled }: DiceBoardProps) {
       {errorMessage && (
         <div className="w-full mt-4 p-2.5 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs text-center">
           {errorMessage}
-        </div>
-      )}
-
-      {/* Last revealed dice results */}
-      {state.rolls[0] > 0 && state.rolls[1] > 0 && (
-        <div className="mt-6 pt-4 border-t border-slate-800 w-full flex justify-around items-center text-center">
-          <div>
-            <span className="text-xs text-slate-400">Player 0 Roll</span>
-            <div className="text-4xl mt-1">{DIE_FACES[state.rolls[0]]}</div>
-            <span className="text-sm font-bold text-slate-300">{state.rolls[0]}</span>
-          </div>
-          <div className="text-2xl font-black text-slate-600">VS</div>
-          <div>
-            <span className="text-xs text-slate-400">Player 1 Roll</span>
-            <div className="text-4xl mt-1">{DIE_FACES[state.rolls[1]]}</div>
-            <span className="text-sm font-bold text-slate-300">{state.rolls[1]}</span>
-          </div>
         </div>
       )}
     </div>
