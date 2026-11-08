@@ -2,7 +2,7 @@
 
 import { useWallet } from '@solana/wallet-adapter-react'
 import { LAMPORTS_PER_SOL, PublicKey } from '@solana/web3.js'
-import { RefreshCw } from 'lucide-react'
+import { RefreshCw, ExternalLink } from 'lucide-react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useMemo, useState } from 'react'
 
@@ -43,22 +43,28 @@ export function AccountChecker() {
 
 export function AccountBalanceCheck({ address }: { address: PublicKey }) {
   const { cluster } = useCluster()
-  const mutation = useRequestAirdrop({ address })
   const query = useGetBalance({ address })
 
   if (query.isLoading) {
     return null
   }
   if (query.isError || !query.data) {
+    const faucetUrl = `https://faucet.solana.com/?address=${address.toBase58()}`
     return (
       <AppAlert
         action={
-          <Button variant="outline" onClick={() => mutation.mutateAsync(1).catch((err) => console.log(err))}>
-            Request Airdrop
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => window.open(faucetUrl, '_blank', 'noopener,noreferrer')}
+            className="flex items-center gap-1.5 bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border-amber-500/40 font-semibold cursor-pointer rounded-xl transition-all"
+          >
+            <span>Open Solana Faucet</span>
+            <ExternalLink className="h-3.5 w-3.5" />
           </Button>
         }
       >
-        You are connected to <strong>{cluster.name}</strong> but your account is not found on this cluster.
+        Connected to <strong>{cluster.name}</strong> with 0 SOL. Free test SOL is available from the official faucet:
       </AppAlert>
     )
   }
@@ -67,10 +73,21 @@ export function AccountBalanceCheck({ address }: { address: PublicKey }) {
 
 export function AccountButtons({ address }: { address: PublicKey }) {
   const { cluster } = useCluster()
+  const faucetUrl = `https://faucet.solana.com/?address=${address.toBase58()}`
   return (
     <div>
-      <div className="space-x-2">
-        {cluster.network?.includes('mainnet') ? null : <ModalAirdrop address={address} />}
+      <div className="flex items-center space-x-2">
+        {cluster.network?.includes('mainnet') ? null : (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => window.open(faucetUrl, '_blank', 'noopener,noreferrer')}
+            className="flex items-center gap-1.5"
+          >
+            <span>Solana Faucet</span>
+            <ExternalLink className="h-3.5 w-3.5 opacity-70" />
+          </Button>
+        )}
         <ModalSend address={address} />
         <ModalReceive address={address} />
       </div>

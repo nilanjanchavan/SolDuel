@@ -1,4 +1,5 @@
 'use client'
+
 import { usePathname } from 'next/navigation'
 import { useState } from 'react'
 import Link from 'next/link'
@@ -18,60 +19,96 @@ export function AppHeader({ links = [] }: { links: { label: string; path: string
   const [showMenu, setShowMenu] = useState(false)
 
   function isActive(path: string) {
-    return path === '/' ? pathname === '/' : pathname.startsWith(path)
+    if (path === '/') return pathname === '/'
+    return pathname.startsWith(path)
   }
 
   return (
-    <header className="relative z-50 px-4 py-2 bg-neutral-100 dark:bg-neutral-900 dark:text-neutral-400">
-      <div className="mx-auto flex justify-between items-center">
-        <div className="flex items-baseline gap-4">
-          <Link className="text-xl font-bold tracking-tight hover:text-neutral-500 dark:hover:text-white flex items-center gap-1.5" href="/">
-            <span className="text-purple-600 dark:text-purple-400">Sol</span><span>Duel</span>
+    <header className="sticky top-0 z-50 px-4 md:px-8 py-3 bg-slate-950/80 backdrop-blur-md border-b border-slate-800/80 text-slate-200">
+      <div className="max-w-7xl mx-auto flex justify-between items-center">
+        {/* Brand Logo & Navigation */}
+        <div className="flex items-center gap-8">
+          <Link className="flex items-center gap-2.5 group" href="/">
+            <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-amber-400 via-amber-500 to-amber-600 flex items-center justify-center text-slate-950 text-sm font-extrabold shadow-md shadow-amber-500/20 group-hover:scale-105 transition-transform">
+              ⚔️
+            </div>
+            <div className="flex items-baseline gap-1.5">
+              <span className="text-xl font-extrabold tracking-tight bg-gradient-to-r from-white via-slate-100 to-slate-300 bg-clip-text text-transparent">
+                SOL<span className="text-amber-400">DUEL</span>
+              </span>
+              <span className="hidden sm:inline-block text-[9px] uppercase font-bold tracking-widest px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-300 border border-amber-500/30">
+                Devnet
+              </span>
+            </div>
           </Link>
-          <div className="hidden md:flex items-center">
-            <ul className="flex gap-4 flex-nowrap items-center">
-              {links.map(({ label, path }) => (
-                <li key={path}>
-                  <Link
-                    className={`hover:text-neutral-500 dark:hover:text-white ${isActive(path) ? 'text-neutral-500 dark:text-white' : ''}`}
-                    href={path}
-                  >
-                    {label}
-                  </Link>
-                </li>
-              ))}
+
+          <nav className="hidden md:flex items-center">
+            <ul className="flex items-center gap-1.5 bg-slate-900/90 p-1 rounded-xl border border-slate-800/90">
+              {links.map(({ label, path }) => {
+                const active = isActive(path)
+                return (
+                  <li key={path}>
+                    <Link
+                      className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all inline-flex items-center ${
+                        active
+                          ? 'bg-slate-800 text-amber-300 border border-slate-700/80 shadow-sm shadow-black/40 font-bold'
+                          : 'text-slate-400 hover:text-slate-100 hover:bg-slate-800/50'
+                      }`}
+                      href={path}
+                    >
+                      {label}
+                    </Link>
+                  </li>
+                )
+              })}
               {publicKey && (
                 <li>
                   <Link
-                    className={`hover:text-neutral-500 dark:hover:text-white ${isActive(`/profile/${publicKey.toBase58()}`) ? 'text-neutral-500 dark:text-white' : ''}`}
+                    className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all inline-flex items-center ${
+                      isActive(`/profile/${publicKey.toBase58()}`)
+                        ? 'bg-slate-800 text-amber-300 border border-slate-700/80 shadow-sm shadow-black/40 font-bold'
+                        : 'text-slate-400 hover:text-slate-100 hover:bg-slate-800/50'
+                    }`}
                     href={`/profile/${publicKey.toBase58()}`}
                   >
-                    Profile
+                    Profile 🏆
                   </Link>
                 </li>
               )}
             </ul>
-          </div>
+          </nav>
         </div>
 
-        <Button variant="ghost" size="icon" className="md:hidden" onClick={() => setShowMenu(!showMenu)}>
-          {showMenu ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
+        {/* Mobile Menu Toggle */}
+        <Button
+          variant="ghost"
+          size="icon"
+          className="md:hidden text-slate-300 hover:text-white"
+          onClick={() => setShowMenu(!showMenu)}
+        >
+          {showMenu ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6 text-slate-300" />}
         </Button>
 
-        <div className="hidden md:flex items-center gap-4">
-          <WalletButton />
+        {/* Desktop Controls */}
+        <div className="hidden md:flex items-center gap-3">
           <ClusterUiSelect />
+          <WalletButton />
           <ThemeSelect />
         </div>
 
+        {/* Mobile Dropdown Menu */}
         {showMenu && (
-          <div className="md:hidden fixed inset-x-0 top-[52px] bottom-0 bg-neutral-100/95 dark:bg-neutral-900/95 backdrop-blur-sm">
-            <div className="flex flex-col p-4 gap-4 border-t dark:border-neutral-800">
-              <ul className="flex flex-col gap-4">
+          <div className="md:hidden fixed inset-x-0 top-[57px] bottom-0 bg-slate-950/95 backdrop-blur-xl z-50 p-6 space-y-6 border-t border-slate-800">
+            <nav>
+              <ul className="flex flex-col gap-2">
                 {links.map(({ label, path }) => (
                   <li key={path}>
                     <Link
-                      className={`hover:text-neutral-500 dark:hover:text-white block text-lg py-2  ${isActive(path) ? 'text-neutral-500 dark:text-white' : ''} `}
+                      className={`block px-4 py-3 rounded-xl text-sm font-semibold transition-all ${
+                        isActive(path)
+                          ? 'bg-slate-800 text-amber-300 border border-slate-700 font-bold'
+                          : 'text-slate-300 hover:bg-slate-900'
+                      }`}
                       href={path}
                       onClick={() => setShowMenu(false)}
                     >
@@ -82,20 +119,26 @@ export function AppHeader({ links = [] }: { links: { label: string; path: string
                 {publicKey && (
                   <li>
                     <Link
-                      className={`hover:text-neutral-500 dark:hover:text-white block text-lg py-2 ${isActive(`/profile/${publicKey.toBase58()}`) ? 'text-neutral-500 dark:text-white' : ''} `}
+                      className={`block px-4 py-3 rounded-xl text-sm font-semibold transition-all ${
+                        isActive(`/profile/${publicKey.toBase58()}`)
+                          ? 'bg-slate-800 text-amber-300 border border-slate-700 font-bold'
+                          : 'text-slate-300 hover:bg-slate-900'
+                      }`}
                       href={`/profile/${publicKey.toBase58()}`}
                       onClick={() => setShowMenu(false)}
                     >
-                      Profile
+                      Profile 🏆
                     </Link>
                   </li>
                 )}
               </ul>
-              <div className="flex flex-col gap-4">
-                <WalletButton />
+            </nav>
+            <div className="flex flex-col gap-3 pt-4 border-t border-slate-800">
+              <div className="flex justify-between items-center">
                 <ClusterUiSelect />
                 <ThemeSelect />
               </div>
+              <WalletButton />
             </div>
           </div>
         )}
