@@ -125,6 +125,7 @@ export function DiceBoard({ state, me, onMove, disabled }: DiceBoardProps) {
 
   const handleRollDice = (choice?: number) => {
     if (disabled || myCommitDone || committing || state.phase !== 'commit') return
+    setErrorMessage(null)
     setCommitting(true)
     try {
       const roll = choice || (selectedRoll !== null ? selectedRoll : getRandomRoll())
@@ -136,8 +137,8 @@ export function DiceBoard({ state, me, onMove, disabled }: DiceBoardProps) {
       const room = state.room || new Uint8Array(32)
       const hash = computeDiceHash(room, me, roll, salt)
       onMove({ type: 'commit', room, hash })
-    } catch (e: any) {
-      setErrorMessage(e?.message || 'Failed to generate roll commitment')
+    } catch (e: unknown) {
+      setErrorMessage(e instanceof Error ? e.message : 'Failed to generate roll commitment')
     } finally {
       setCommitting(false)
     }
@@ -266,9 +267,15 @@ export function DiceBoard({ state, me, onMove, disabled }: DiceBoardProps) {
               >
                 Reveal Your Die {selectedRoll ? `${DIE_FACES[selectedRoll]} (${selectedRoll})` : ''}
               </button>
-              {errorMessage && <div className="mt-2 text-rose-400 text-xs">{errorMessage}</div>}
             </div>
           )}
+        </div>
+      )}
+
+      {/* Visible Error Banner */}
+      {errorMessage && (
+        <div className="w-full mt-4 p-2.5 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs text-center">
+          {errorMessage}
         </div>
       )}
 

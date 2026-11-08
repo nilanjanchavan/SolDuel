@@ -129,6 +129,7 @@ export function RpsBoard({ state, me, onMove, disabled }: RpsBoardProps) {
 
   const handleSelectChoice = (c: RpsChoice) => {
     if (disabled || myCommitDone || committing || state.phase !== 'commit') return
+    setErrorMessage(null)
     setCommitting(true)
     try {
       const salt = selectedChoice === c && mySalt ? mySalt : generateSalt()
@@ -139,8 +140,8 @@ export function RpsBoard({ state, me, onMove, disabled }: RpsBoardProps) {
       const room = state.room || new Uint8Array(32)
       const hash = computeRpsHash(room, me, c, salt)
       onMove({ type: 'commit', room, hash })
-    } catch (e: any) {
-      setErrorMessage(e?.message || 'Failed to generate commit')
+    } catch (e: unknown) {
+      setErrorMessage(e instanceof Error ? e.message : 'Failed to generate commit')
     } finally {
       setCommitting(false)
     }
@@ -279,9 +280,15 @@ export function RpsBoard({ state, me, onMove, disabled }: RpsBoardProps) {
                   ? `${CHOICES[selectedChoice].icon} ${CHOICES[selectedChoice].label}`
                   : 'Your Move'}
               </button>
-              {errorMessage && <div className="mt-2 text-rose-400 text-xs">{errorMessage}</div>}
             </div>
           )}
+        </div>
+      )}
+
+      {/* Visible Error Banner */}
+      {errorMessage && (
+        <div className="w-full mt-4 p-2.5 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs text-center">
+          {errorMessage}
         </div>
       )}
 
